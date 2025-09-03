@@ -271,7 +271,6 @@ pytest -q -m integration
 ## 🙋 FAQ
 
 - **Why generic endpoints?** Flexibility; typed wrappers where helpful.
-- **Are special calendars supported?** Validation yes; formatting for common types.
 - **Python 3.8 quirks?** No PEP 604 unions; `isocalendar()` handled explicitly.
 
 <a id="contributing"></a>
