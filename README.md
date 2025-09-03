@@ -281,4 +281,4 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the onboarding guide, testing str
 <a id="license"></a>
 ## 📜 License
 
-MIT
+BSD 3
