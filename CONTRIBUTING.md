@@ -83,6 +83,69 @@ Now you can:
 from dhis2_client import DHIS2AsyncClient
 ```
 
+Once you have built and installed ```dhis2-client``` locally (See the [Developer Onboarding Guide](DEVELOPER_GUIDE.md) for details ), you can import and use it in another project.
+
+```python
+from dhis2_client import DHIS2AsyncClient, Settings
+from dhis2_client.models import DataElement, DataValue, DataValueSet
+import asyncio
+
+settings = Settings(
+    base_url="https://play.dhis2.org/40.0.0",  # or your DHIS2 instance
+    username="admin",
+    password="district",
+)
+
+async def main():
+    async with DHIS2AsyncClient.from_settings(settings) as client:
+
+        # --- 📖 READ metadata ---
+        des = await client.get_data_elements(fields=["id", "name"], page_size=5, paging=False)
+        print("First 5 data elements:", [d.name for d in des])
+
+        # --- ✨ CREATE metadata ---
+        new_de = DataElement(
+            name="Demo DE",
+            shortName="DemoDE",
+            domainType="AGGREGATE",
+            valueType="NUMBER",
+            aggregationType="SUM",
+        )
+        created = await client.post_json("/api/dataElements", new_de.model_dump())
+        print("Created DataElement:", created)
+
+        # --- 🛠️ UPDATE metadata ---
+        de_id = created.get("uid") or created.get("id")
+        await client.post_json(
+            f"/api/dataElements/{de_id}",
+            {"name": "Demo DE Updated"},
+        )
+        print("Updated DataElement name.")
+
+        # --- ❌ DELETE metadata ---
+        await client.delete(f"/api/dataElements/{de_id}")
+        print("Deleted DataElement.")
+
+        # --- 📊 CREATE + DELETE data values ---
+        dvs = DataValueSet(
+            dataSet="someDataSetId",
+            period="202401",
+            orgUnit="someOrgUnitId",
+            dataValues=[
+                DataValue(dataElement="de123456789", period="202401", orgUnit="ou123456789", value="42")
+            ],
+        )
+        resp_create = await client.post_data_value_set(dvs, import_strategy="CREATE")
+        print("DataValueSet create response:", resp_create)
+
+        resp_delete = await client.post_data_value_set(dvs, import_strategy="DELETE")
+        print("DataValueSet delete response:", resp_delete)
+
+asyncio.run(main())
+
+```
+
+
 ### Install from wheel
 If you’ve built the wheel:
 ```bash
