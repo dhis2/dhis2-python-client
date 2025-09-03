@@ -1,0 +1,67 @@
+# Run `pre-commit install` and `pre-commit install --hook-type pre-push`
+# Targets Python 3.8-compatible hooks.
+
+repos:
+  # --- Fast, no-config hygiene hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: detect-private-key
+
+  # --- Ruff: lint + format (super fast)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        args: [--fix]
+      - id: ruff-format
+        name: ruff (format)
+
+  # --- pyupgrade for py3.8+ syntax modernizations
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.19.0
+    hooks:
+      - id: pyupgrade
+        args: [--py38-plus]
+
+  # --- Local hooks
+  - repo: local
+    hooks:
+      # Fast unit tests before pushing (skip on commit to keep commits snappy)
+      - id: pytest-unit
+        name: pytest (unit only)
+        entry: bash
+        language: system
+        pass_filenames: false
+        stages: [push]   # runs on `pre-push`
+        args:
+          - -c
+          - |
+            set -e
+            echo "🔎 running unit tests..."
+            pytest -q tests/unit
+
+      # Optional: integration tests behind an env flag (won't block if not set)
+      - id: pytest-integration
+        name: pytest (integration, optional)
+        entry: bash
+        language: system
+        pass_filenames: false
+        stages: [push]
+        args:
+          - -c
+          - |
+            set -e
+            if [ "${RUN_INTEGRATION:-}" = "1" ]; then
+              echo "🌐 running integration tests (RUN_INTEGRATION=1)..."
+              pytest -q -m integration
+            else
+              echo "🌐 skipping integration tests (set RUN_INTEGRATION=1 to enable)"
+            fi

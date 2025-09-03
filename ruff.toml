@@ -1,0 +1,27 @@
+# ruff.toml
+target-version = "py38"
+line-length = 120
+
+[lint]
+select = [
+  "E",    # pycodestyle
+  "F",    # pyflakes
+  "W",    # warnings
+  "I",    # isort
+  "B",    # bugbear
+  "N",    # pep8-naming
+  "UP",   # pyupgrade (we'll ignore unsafe ones below)
+]
+ignore = [
+  "E203",   # whitespace around ':'
+  "UP006",  # prefer builtins (list/dict) — not safe on py38 without heavy changes
+  "UP007",  # | unions — not safe on py38
+  # If you want to keep your compact one-liners, uncomment these:
+  # "E701",  # multiple statements on one line (colon)
+  # "E702",  # multiple statements on one line (semicolon)
+  # "N818",  # exception should end with Error (we can ignore if using DHIS2 naming)
+]
+
+[lint.per-file-ignores]
+# Tests often have long strings/URLs; relax line length and compact asserts there
+"tests/**/*.py" = ["E501"]
