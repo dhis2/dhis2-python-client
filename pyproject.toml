@@ -28,6 +28,8 @@ cli = [
   "rich>=13",
   "pyyaml>=6",
 ]
+test = ["pytest>=8.2,<9", "pytest-asyncio>=0.23", "respx>=0.21", "coverage[toml]>=7"]
+dev  = ["pre-commit==3.5.0", "ruff>=0.5.7", "black>=24.3", "mypy>=1.10"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -1,30 +1,43 @@
+# src/dhis2_client/settings.py
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Optional
 
-from pydantic import AnyHttpUrl, SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime configuration loaded from environment / .env (DHIS2_* prefix)."""
+    # --- connection ---
+    base_url: Optional[str] = None
+    verify_ssl: bool = True
+    timeout: int = 30
 
-    base_url: AnyHttpUrl
+    # --- auth ---
     username: Optional[str] = None
     password: Optional[SecretStr] = None
     token: Optional[SecretStr] = None
-    timeout: float = 30.0
-    verify_ssl: bool = True
 
+    # pydantic-settings config
     model_config = SettingsConfigDict(
         env_prefix="DHIS2_",
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",
+        case_sensitive=False,
+        extra="ignore",  # ignore unexpected env vars
     )
 
-    def auth_header(self) -> Dict[str, str]:
-        """Return Authorization header when using token auth (preferred in DHIS2 2.40+)."""
-        if self.token is not None:
-            return {"Authorization": f"ApiToken {self.token.get_secret_value()}"}
-        return {}
+    # Always coerce raw env/CLI strings into SecretStr
+    @field_validator("password", "token", mode="before")
+    @classmethod
+    def _coerce_secret(cls, v):
+        if v is None or isinstance(v, SecretStr):
+            return v
+        return SecretStr(str(v))
+
+    # Convenience accessors (optional)
+    def password_value(self) -> Optional[str]:
+        return self.password.get_secret_value() if self.password else None
+
+    def token_value(self) -> Optional[str]:
+        return self.token.get_secret_value() if self.token else None
