@@ -86,13 +86,13 @@ pip install -e ".[cli]"
 <a id="configuration"></a>
 ## 🔑 Configuration
 
-Put credentials and options in `.env` (see `.env.example`):
+Put credentials and options in a `.env` file in the root folder:
 
 ```env
 DHIS2_BASE_URL=http://localhost:8080
 DHIS2_USERNAME=admin
 DHIS2_PASSWORD=district
-# or DHIS2_TOKEN=your_api_token
+#or DHIS2_TOKEN=your_api_token
 
 DHIS2_TIMEOUT=30
 VERIFY_SSL=true
@@ -246,19 +246,29 @@ Payload (if parsed) is attached to `details` for debugging.
 ## 🧪 Testing
 
 <a id="unit"></a>
-### Unit
+### Running Unit Tests
 ```bash
 pytest -q tests/unit
 ```
 
 <a id="integration"></a>
-### Integration
+### Running Integration Tests
 ```bash
 # Non-destructive
 pytest -q -m integration
 
 # With writes
 export ALLOW_DHIS2_MUTATIONS=true
+pytest -q -m integration
+
+# Optional: parent OU for provisioning fixtures
+export TEST_PARENT_OU=ImspTQPwCqd
+pytest -q -m integration
+
+# Optional: pin specific resources for integration tests
+export TEST_DATASET_UID=lyLU2wR22tC
+export TEST_OU_UID=ImspTQPwCqd
+export TEST_DE_UID=fbfJHSPpUQD
 pytest -q -m integration
 ```
 

@@ -130,7 +130,8 @@ dhis2-python-client/
 
 ## ⚙️ Settings & Auth
 
-Settings are loaded with **Pydantic** from environment variables (or `.env`):
+Settings are automatically loaded with **Pydantic** from environment variables (or `.env`). 
+Or you can manually create the Settings object:
 
 ```python
 from dhis2_client import Settings
