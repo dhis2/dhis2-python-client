@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Optional, Dict
 from base64 import b64encode
 
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     password: Optional[SecretStr] = None
     token: Optional[SecretStr] = None  # DHIS2 Personal Access Token (PAT)
 
+    # pydantic-settings config
     model_config = SettingsConfigDict(
         env_prefix="DHIS2_",
         env_file=".env",
@@ -25,6 +27,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Always coerce raw env/CLI strings into SecretStr
     @field_validator("password", "token", mode="before")
     @classmethod
     def _coerce_secret(cls, v):
@@ -32,12 +35,18 @@ class Settings(BaseSettings):
             return v
         return SecretStr(str(v))
 
-    # --- convenience accessors
+    # ---- robust accessors that tolerate str | SecretStr | None
+    @staticmethod
+    def _reveal(value: Optional[object]) -> Optional[str]:
+        if value is None:
+            return None
+        return value.get_secret_value() if hasattr(value, "get_secret_value") else str(value)
+
     def password_value(self) -> Optional[str]:
-        return self.password.get_secret_value() if self.password else None
+        return self._reveal(self.password)
 
     def token_value(self) -> Optional[str]:
-        return self.token.get_secret_value() if self.token else None
+        return self._reveal(self.token)
 
     @property
     def auth_header(self) -> Dict[str, str]:
@@ -45,18 +54,12 @@ class Settings(BaseSettings):
         Build an Authorization header for DHIS2:
         - If a PAT token is provided -> 'Authorization: ApiToken <token>'
         - Else if username/password -> 'Authorization: Basic <base64(user:pass)>'
-        - Else -> empty dict
+        - Else -> {}
         """
         tok = self.token_value()
         if tok:
-            # DHIS2 Personal Access Token format
-            # Ref: DHIS2 docs — Authorization: ApiToken <token>
             return {"Authorization": f"ApiToken {tok}"}
-
-        user = self.username
-        pwd = self.password_value()
-        if user and pwd:
-            userpass = f"{user}:{pwd}".encode("utf-8")
+        if self.username and self.password_value():
+            userpass = f"{self.username}:{self.password_value()}".encode("utf-8")
             return {"Authorization": "Basic " + b64encode(userpass).decode("ascii")}
-
         return {}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
+from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Mapping
 
 import httpx
 
@@ -23,6 +23,31 @@ DEFAULT_HEADERS: Dict[str, str] = {
     "Accept": "application/json",
     "Content-Type": "application/json",
 }
+
+# -------------------------- NEW tiny helpers --------------------------
+
+def _reveal(value):
+    """Return plain string from SecretStr or pass through None/str."""
+    if value is None:
+        return None
+    return value.get_secret_value() if hasattr(value, "get_secret_value") else value
+
+def _get_auth_header_from_settings(settings: Settings) -> Dict[str, str]:
+    """
+    Support both a property or a method named 'auth_header' on Settings.
+    Returns {} if not available or malformed.
+    """
+    if hasattr(settings, "auth_header"):
+        try:
+            v = getattr(settings, "auth_header")
+            hdr = v() if callable(v) else v  # method vs property
+            if isinstance(hdr, Mapping):
+                return dict(hdr)
+        except Exception:
+            pass
+    return {}
+
+# ---------------------------------------------------------------------
 
 
 class DHIS2AsyncClient:
@@ -64,16 +89,22 @@ class DHIS2AsyncClient:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> DHIS2AsyncClient:
-        """Construct a client from Settings (token header or basic auth)."""
-        headers = settings.auth_header()
-        auth = None
-        if not headers and settings.username and settings.password:
-            auth = httpx.BasicAuth(settings.username, settings.password.get_secret_value())
+        """Construct a client from Settings (ApiToken header or Basic auth)."""
+        # Prefer a ready-made header from Settings (property or method)
+        headers = _get_auth_header_from_settings(settings)
+
+        # If no header was provided, fall back to building Basic auth
+        auth: Optional[httpx.Auth] = None
+        if not headers and settings.username and getattr(settings, "password", None) is not None:
+            pwd = _reveal(settings.password)
+            if pwd:  # avoid passing None/empty
+                auth = httpx.BasicAuth(settings.username, pwd)
+
         return cls(
-            base_url=str(settings.base_url),
-            timeout=settings.timeout,
-            verify_ssl=settings.verify_ssl,
-            headers=headers,
+            base_url=str(settings.base_url or ""),
+            timeout=float(settings.timeout),
+            verify_ssl=bool(settings.verify_ssl),
+            headers=headers or None,
             auth=auth,
         )
 
