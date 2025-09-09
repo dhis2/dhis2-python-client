@@ -127,16 +127,28 @@ class DHIS2AsyncClient:
             raise NetworkError(message=str(te)) from te
 
     async def _request_json(self, method: str, path: str, **kwargs) -> Dict[str, Any]:
-        """Send a request and parse JSON, raising typed errors on HTTP failures."""
+        """Send a request and parse JSON, raising typed errors on HTTP failures (incl. 3xx)."""
         resp = await self._request(method, path, **kwargs)
-        if resp.status_code >= 400:
+
+        # Treat ALL non-2xx as errors (3xx, 4xx, 5xx)
+        if not (200 <= resp.status_code < 300):
+            # Try to surface server-provided error info
+            data = None
+            msg = None
             try:
                 data = resp.json()
-                msg = data.get("message") or data.get("error") or resp.text
+                msg = data.get("message") or data.get("error")
             except Exception:
-                data = None
-                msg = resp.text
+                # include Location for 3xx to make redirects obvious
+                loc = resp.headers.get("Location")
+                if loc:
+                    msg = f"Redirected to: {loc}"
+                else:
+                    msg = resp.text or f"HTTP {resp.status_code}"
+
             raise error_from_status(resp.status_code, msg, path=path, details=data)
+
+        # OK → parse JSON
         try:
             return resp.json()
         except Exception as je:

@@ -3,6 +3,13 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator, Dict, Optional
 
+from typing import Any
+from typing import Any
+try:
+    # Pydantic v2
+    from pydantic import BaseModel as PydanticBaseModel  # type: ignore
+except Exception:  # pragma: no cover
+    PydanticBaseModel = object  # fallback, just in case
 
 def run(coro):
     return asyncio.run(coro)
@@ -27,6 +34,41 @@ async def iter_pages(client, path: str, params: Optional[Dict[str, Any]] = None,
             break
         page += 1
 
+def make_json_safe(obj: Any) -> Any:
+    """
+    Coerce non-JSON-serializable values (e.g., pydantic Url) to strings.
+    Apply after to_plain().
+    """
+    # primitives
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    # containers
+    if isinstance(obj, dict):
+        return {str(k): make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        t = type(obj)
+        return t(make_json_safe(v) for v in obj)
+    # everything else -> string
+    return str(obj)
+
+def to_plain(obj: Any) -> Any:
+    """
+    Convert Pydantic models (and containers of models) into plain Python types.
+    Works recursively, safe for dict/list/tuple/set.
+    """
+    if isinstance(obj, PydanticBaseModel):
+        # Pydantic v2
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        # Pydantic v1 fallback
+        if hasattr(obj, "dict"):
+            return obj.dict()
+    if isinstance(obj, dict):
+        return {k: to_plain(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        t = type(obj)
+        return t(to_plain(v) for v in obj)
+    return obj
 
 def build_settings_with_overrides(*, base_url: Optional[str], username: Optional[str], password: Optional[str], token: Optional[str]):
     """Create Settings(), then override fields if CLI flags provided.
