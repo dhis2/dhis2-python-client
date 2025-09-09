@@ -12,8 +12,21 @@ license = { text = "MIT" }
 authors = [{ name = "dhis2-client" }]
 keywords = ["dhis2", "async", "httpx", "pydantic"]
 
+[project.scripts]
+dhis2-client = "dhis2_client.cli.app:app"
+
+[project.optional-dependencies]
+cli = [
+  "typer>=0.12",
+  "rich>=13",
+  "pyyaml>=6",
+]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"

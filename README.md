@@ -1,7 +1,7 @@
-# dhis2-client
+# 🚀 dhis2-python-client
 
 > **Async DHIS2 Web API client** (Python **3.8+**) with **httpx**, **Pydantic v2**, **structured logging**, and **paging**.  
-> Includes **period validation/formatting**, clean **typed models**, and a full **unit + integration** test suite.
+> Includes **period validation/formatting**, clean **typed models**, a full **unit + integration** test suite, and an optional **CLI**.
 
 <p align="center">
   <img alt="status" src="https://img.shields.io/badge/status-stable-blue"/>
@@ -23,6 +23,7 @@
   - [Typed Helpers](#typed-helpers)
   - [Paging](#paging)
   - [Periods](#periods)
+  - [CLI](#cli)
 - [📖 API Reference](#api-reference)
 - [📝 Logging](#logging)
 - [❗ Errors](#errors)
@@ -41,6 +42,7 @@ A small, focused **async** client for the **DHIS2 Web API**:
 - **Generic** HTTP helpers so you can hit any path.
 - **Typed** models for common resources.
 - **Paging** and **period** helpers out-of-the-box.
+- **CLI** for quick one-liners and automation.
 
 <a id="features"></a>
 ## 🚀 Features
@@ -50,6 +52,7 @@ A small, focused **async** client for the **DHIS2 Web API**:
 - 🧱 **Structured logging** with `structlog` (JSON output)
 - 📑 **Paging helpers** using `pager.page` / `pageCount`
 - 📅 **Period validation & formatting** (subset of DHIS2 types)
+- 💻 **CLI** built with `typer` + `rich`
 - 🧪 **Tests**: unit + integration (with `.env` and optional pinned UIDs)
 
 <a id="requirements"></a>
@@ -61,11 +64,23 @@ A small, focused **async** client for the **DHIS2 Web API**:
 <a id="installation"></a>
 ## ⚙️ Installation
 
+### Library only
+```bash
+pip install dhis2-python-client
+```
+
+### Library + CLI
+```bash
+pip install "dhis2-python-client[cli]"
+```
+👉 This installs the `dhis2-client` executable along with `typer`, `rich`, and `pyyaml`.
+
+### Development install
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -U pip
-pip install -r requirements.txt
-pip install -r requirements-dev.txt   # for tests
+pip install -r requirements-dev.txt
+pip install -e ".[cli]"
 ```
 
 <a id="configuration"></a>
@@ -82,14 +97,9 @@ DHIS2_PASSWORD=district
 DHIS2_TIMEOUT=30
 VERIFY_SSL=true
 LOG_LEVEL=INFO
-
-# Optional pins for stable integration runs:
-# TEST_DATASET_UID=lyLU2wR22tC
-# TEST_OU_UID=ImspTQPwCqd
-# TEST_DE_UID=fbfJHSPpUQD
 ```
 
-> The tests can auto-pick **default COC/AOC**, so you typically only need DS/OU/DE pins.
+> CLI and library also support layered config: system TOML, user TOML, `.env`, environment variables, then CLI flags.
 
 <a id="usage"></a>
 ## 💡 Usage
@@ -102,7 +112,7 @@ import asyncio
 from dhis2_client import DHIS2AsyncClient, Settings
 
 async def main():
-    settings = Settings()  # loads from .env
+    settings = Settings()  # loads from env/.env
     async with DHIS2AsyncClient.from_settings(settings) as client:
         info = await client.get_system_info()
         print(info.version)
@@ -115,7 +125,7 @@ asyncio.run(main())
 
 ```python
 await client.get("/api/organisationUnits", params={"pageSize": 5})
-await client.post_json("/api/dataElements", {"name":"My DE","shortName":"MDE","domainType":"AGGREGATE","valueType":"INTEGER"})
+await client.post_json("/api/dataElements", {"name": "My DE", "shortName": "MDE", "domainType": "AGGREGATE", "valueType": "INTEGER"})
 ```
 
 <a id="typed-helpers"></a>
@@ -153,6 +163,34 @@ from dhis2_client.models import validate_period, format_period
 
 validate_period("Monthly", "202501")          # ok
 format_period("Weekly", date(2025, 1, 15))    # "2025W03"
+```
+
+<a id="cli"></a>
+### Command-line interface (CLI)
+
+Install with CLI extras:
+```bash
+pip install "dhis2-python-client[cli]"
+```
+
+Usage examples:
+```bash
+# System info
+dhis2-client system-info --output table
+
+# Generic GET with paging
+dhis2-client --base-url https://play.dhis2.org/dev --username admin --password district \
+  get /api/dataElements --fields id --fields name --all --output ndjson
+
+# Safer: prompt for password
+dhis2-client --base-url https://play.dhis2.org/dev --username admin system-info
+# Password: ****
+
+# Token usage
+dhis2-client --base-url https://play.dhis2.org/dev --token $MYTOKEN system-info
+
+# Period helpers
+dhis2-client period validate Monthly 202501
 ```
 
 <a id="api-reference"></a>
@@ -242,6 +280,11 @@ pytest -q -m integration
 │       ├── exceptions.py
 │       ├── logging_conf.py
 │       ├── settings.py
+│       ├── cli
+│       │   ├── __init__.py
+│       │   ├── app.py
+│       │   ├── output.py
+│       │   └── utils.py
 │       └── models
 │           ├── __init__.py
 │           ├── collections.py
@@ -271,7 +314,7 @@ pytest -q -m integration
 ## 🙋 FAQ
 
 - **Why generic endpoints?** Flexibility; typed wrappers where helpful.
-- **Python 3.8 quirks?** No PEP 604 unions; `isocalendar()` handled explicitly.
+- **Why a CLI?** For quick inspection, automation, and integration with shell pipelines.
 
 <a id="contributing"></a>
 ## 🤝 Contributing
@@ -280,5 +323,3 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the onboarding guide, testing str
 
 <a id="license"></a>
 ## 📜 License
-
-BSD 3
