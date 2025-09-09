@@ -1,6 +1,6 @@
 # 🚀 dhis2-python-client
 
-> **Async DHIS2 Web API client** (Python **3.8+**) with **httpx**, **Pydantic v2**, **structured logging**, and **paging**.  
+> **Async DHIS2 Web API client** (Python **3.10+**) with **httpx**, **Pydantic v2**, **structured logging**, and **paging**.  
 > Includes **period validation/formatting**, clean **typed models**, a full **unit + integration** test suite, and an optional **CLI**.
 
 <p align="center">
@@ -58,7 +58,7 @@ A small, focused **async** client for the **DHIS2 Web API**:
 <a id="requirements"></a>
 ## 📋 Requirements
 
-- Python **3.8+**
+- Python **3.10+**
 - A running DHIS2 instance for integration tests
 
 <a id="installation"></a>
