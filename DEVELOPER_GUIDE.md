@@ -7,7 +7,6 @@ Welcome to **dhis2-client**! This guide gets you from zero → productive: envir
 ## 📦 Prerequisites
 
 - **Python**: 3.8–3.12 (project CI targets 3.8 compatibility)
-- **pipx** *(optional but recommended)* for developer tools  
 - A DHIS2 instance for integration tests (e.g. local, test server, or `play.dhis2.org`)
 
 > Tip: If you’re on Ubuntu, ensure `python3-venv` is installed.
@@ -30,7 +29,10 @@ pip install -U pip
 pip install -r requirements.txt
 pip install -r requirements-dev.txt  # ruff, pytest, respx, etc.
 
-# 4) Run unit tests
+# 4) Install locally in editable mode. This lets you work on the library and use it in-place:
+pip install -e .
+
+# 5) Run unit tests
 pytest -q tests/unit
 ```
 
@@ -68,7 +70,6 @@ pytest -q tests/unit
 ### Integration tests (live DHIS2)
 Provide DHIS2 credentials via `.env` or environment variables:
 
-**.env**
 ```ini
 DHIS2_BASE_URL=https://play.dhis2.org/40.0.0
 DHIS2_USERNAME=admin
@@ -78,16 +79,28 @@ DHIS2_PASSWORD=district
 Then:
 
 ```bash
-# read-only tests (safe)
+# Non-destructive
 pytest -q -m integration
 
-# include mutation tests (creates/deletes metadata & data)
-ALLOW_DHIS2_MUTATIONS=true pytest -q -m integration
+# With writes
+export ALLOW_DHIS2_MUTATIONS=true
+pytest -q -m integration
+
+# Optional: parent OU for provisioning fixtures
+export TEST_PARENT_OU=ImspTQPwCqd
+pytest -q -m integration
+
+# Optional: pin specific resources for integration tests
+export TEST_DATASET_UID=lyLU2wR22tC
+export TEST_OU_UID=ImspTQPwCqd
+export TEST_DE_UID=fbfJHSPpUQD
+pytest -q -m integration
 ```
 
 **Notes:**
 - Live tests gracefully skip if `.env` is missing or the server returns expected conflicts.
 - Mutation tests use safe, self-contained fixtures that **create** and then **delete** test objects (DataElements, DataSets, OrgUnits) or fallback to lookup if creation fails.
+- The client auto-picks default COC/AOC.
 
 ---
 
@@ -148,63 +161,19 @@ settings = Settings(
 
 ---
 
-## 🌐 Using the Client
+## 🔁 Contributions
 
-```python
-import asyncio
-from dhis2_client import DHIS2AsyncClient, Settings
-from dhis2_client.models import DataElement, DataValue, DataValueSet
-
-settings = Settings(
-    base_url="https://play.dhis2.org/40.0.0",
-    username="admin",
-    password="district",
-)
-
-async def main():
-    async with DHIS2AsyncClient.from_settings(settings) as client:
-        # System info
-        info = await client.get_system_info()
-        print(info.version)
-
-        # List some metadata, no paging (client flattens results)
-        des = await client.get_data_elements(fields=["id","name"], page_size=5, paging=False)
-        print([d.name for d in des])
-
-        # Create + delete data values
-        dvs = DataValueSet(
-            dataSet="DATASET_UID",
-            period="202401",
-            orgUnit="ORGUNIT_UID",
-            dataValues=[DataValue(dataElement="DE_UID", period="202401", orgUnit="ORGUNIT_UID", value="99")],
-        )
-        await client.post_data_value_set(dvs, import_strategy="CREATE")
-        await client.post_data_value_set(dvs, import_strategy="DELETE")
-
-asyncio.run(main())
-```
-
----
-
-## 📚 Period Formatting & Validation
-
-```python
-from datetime import date
-from dhis2_client.models import format_period, validate_period
-
-p = format_period("Monthly", date(2025, 1, 15))  # "202501"
-validate_period("Weekly", "2025W03")             # ok
-```
-
----
-
-## 🔁 Contributing Workflow (TL;DR)
-
-1. Branch from `main`
+1. Fork or branch from `main`
+   ```bash
+   git checkout -b feat/my-change
+   ```
 2. Make changes
 3. Run checks: `ruff check . --fix && ruff format . && pytest -q`
 4. Commit with clear message
-5. Open a PR
+   ```bash
+   git commit -m "feat: add paging to DataSet fetch"
+   ```
+5. Push and open a PR
 
 ---
 
@@ -255,6 +224,20 @@ from dhis2_client import DHIS2AsyncClient, Settings
 
 ---
 
+## 📚 Tips
+
+- Use `pytest -v` for detailed test logs.
+- Logging is JSON; pipe through `jq` for readability:
+  ```bash
+  pytest -q | jq .
+  ```
+- Always run `pre-commit` (if installed) before pushing:
+  ```bash
+  pre-commit run --all-files
+  ```
+
+---
+
 ## 🙌 Thanks!
 
-We love contributions — whether docs, tests, bug fixes, or new features (e.g., DHIS2 Tracker API support). See `CONTRIBUTING.md` for details and coding guidelines.
+We love contributions — whether docs, tests, bug fixes, or new features (e.g., DHIS2 Tracker API support). 

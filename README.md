@@ -11,29 +11,29 @@
   <img alt="license" src="https://img.shields.io/badge/license-MIT-success"/>
 </p>
 
+---
+
 ## 🗂️ Table of Contents
-- [✨ Overview](#overview)
-- [🚀 Features](#features)
-- [📋 Requirements](#requirements)
-- [⚙️ Installation](#installation)
-- [🔑 Configuration](#configuration)
-- [💡 Usage](#usage)
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
   - [Create a Client](#create-a-client)
   - [Generic Endpoints](#generic-endpoints)
   - [Typed Helpers](#typed-helpers)
   - [Paging](#paging)
   - [Periods](#periods)
   - [CLI](#cli)
-- [📖 API Reference](#api-reference)
-- [📝 Logging](#logging)
-- [❗ Errors](#errors)
-- [🧪 Testing](#testing)
-  - [Unit](#unit)
-  - [Integration](#integration)
-- [📂 Project Layout](#project-layout)
-- [🙋 FAQ](#faq)
-- [🤝 Contributing](#contributing)
-- [📜 License](#license)
+- [API Reference](#api-reference)
+- [Logging](#logging)
+- [Errors](#errors)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
 
 <a id="overview"></a>
 ## ✨ Overview
@@ -43,6 +43,8 @@ A small, focused **async** client for the **DHIS2 Web API**:
 - **Typed** models for common resources.
 - **Paging** and **period** helpers out-of-the-box.
 - **CLI** for quick one-liners and automation.
+
+---
 
 <a id="features"></a>
 ## 🚀 Features
@@ -55,11 +57,15 @@ A small, focused **async** client for the **DHIS2 Web API**:
 - 💻 **CLI** built with `typer` + `rich`
 - 🧪 **Tests**: unit + integration (with `.env` and optional pinned UIDs)
 
+---
+
 <a id="requirements"></a>
 ## 📋 Requirements
 
 - Python **3.8+**
 - A running DHIS2 instance for integration tests
+
+---
 
 <a id="installation"></a>
 ## ⚙️ Installation
@@ -83,6 +89,8 @@ pip install -r requirements-dev.txt
 pip install -e ".[cli]"
 ```
 
+---
+
 <a id="configuration"></a>
 ## 🔑 Configuration
 
@@ -101,8 +109,12 @@ LOG_LEVEL=INFO
 
 > CLI and library also support layered config: system TOML, user TOML, `.env`, environment variables, then CLI flags.
 
+---
+
 <a id="usage"></a>
 ## 💡 Usage
+
+---
 
 <a id="create-a-client"></a>
 ### Create a Client
@@ -120,6 +132,8 @@ async def main():
 asyncio.run(main())
 ```
 
+---
+
 <a id="generic-endpoints"></a>
 ### Generic Endpoints
 
@@ -127,6 +141,8 @@ asyncio.run(main())
 await client.get("/api/organisationUnits", params={"pageSize": 5})
 await client.post_json("/api/dataElements", {"name": "My DE", "shortName": "MDE", "domainType": "AGGREGATE", "valueType": "INTEGER"})
 ```
+
+---
 
 <a id="typed-helpers"></a>
 ### Typed Helpers
@@ -145,6 +161,8 @@ payload = DataValueSet(
 await client.post_data_value_set(payload, import_strategy="CREATE")
 ```
 
+---
+
 <a id="paging"></a>
 ### Paging
 
@@ -153,6 +171,8 @@ async for page in client.iter_data_elements(fields=["id","name"], page_size=500)
     for de in page:
         print(de.id, de.name)
 ```
+
+---
 
 <a id="periods"></a>
 ### Periods
@@ -164,6 +184,8 @@ from dhis2_client.models import validate_period, format_period
 validate_period("Monthly", "202501")          # ok
 format_period("Weekly", date(2025, 1, 15))    # "2025W03"
 ```
+
+---
 
 <a id="cli"></a>
 ### Command-line interface (CLI)
@@ -193,39 +215,43 @@ dhis2-client --base-url https://play.dhis2.org/dev --token $MYTOKEN system-info
 dhis2-client period validate Monthly 202501
 ```
 
+---
+
 <a id="api-reference"></a>
 ## 📖 API Reference
 
-### 🔧 System
+### System
 - `get_system_info()` → `SystemInfo`
 
-### 🏢 Organisation Units
+### Organisation Units
 - `get_organisation_units(fields, page_size=100, paging=True)`
 - `iter_organisation_units(fields, page_size=100)`
 - `list_all_organisation_units(fields, page_size=100)`
 
-### 📊 Data Elements
+### Data Elements
 - `get_data_elements(fields, page_size=100, paging=True)`
 - `iter_data_elements(fields, page_size=100)`
 - `list_all_data_elements(fields, page_size=100)`
 
-### 📦 Data Sets
+### Data Sets
 - `get_data_sets(fields, page_size=100, paging=True)`
 - `iter_data_sets(fields, page_size=100)`
 - `list_all_data_sets(fields, page_size=100)`
 
-### 📝 Data Value Sets
+### Data Value Sets
 - `post_data_value_set(dvs: DataValueSet, import_strategy="CREATE"|"DELETE", dry_run=False)`
 
-### 🌐 Generic Endpoints
+### Generic Endpoints
 - `get(path, params=None)`
 - `post_json(path, payload)`
 - `put_json(path, payload)`
 - `delete(path)`
 
-### 📅 Period Utilities
+### Period Utilities
 - `validate_period(period_type, period_str)`
 - `format_period(period_type, date_obj)`
+
+---
 
 <a id="logging"></a>
 ## 📝 Logging
@@ -236,89 +262,15 @@ Emits compact JSON:
 {"event":"http.response","status":200,"path":"/api/system/info","request_id":"..."}
 ```
 
+---
+
 <a id="errors"></a>
 ## ❗ Errors
 
 HTTP errors raise typed exceptions, e.g. `NotFound`, `Conflict`.  
 Payload (if parsed) is attached to `details` for debugging.
 
-<a id="testing"></a>
-## 🧪 Testing
-
-<a id="unit"></a>
-### Running Unit Tests
-```bash
-pytest -q tests/unit
-```
-
-<a id="integration"></a>
-### Running Integration Tests
-```bash
-# Non-destructive
-pytest -q -m integration
-
-# With writes
-export ALLOW_DHIS2_MUTATIONS=true
-pytest -q -m integration
-
-# Optional: parent OU for provisioning fixtures
-export TEST_PARENT_OU=ImspTQPwCqd
-pytest -q -m integration
-
-# Optional: pin specific resources for integration tests
-export TEST_DATASET_UID=lyLU2wR22tC
-export TEST_OU_UID=ImspTQPwCqd
-export TEST_DE_UID=fbfJHSPpUQD
-pytest -q -m integration
-```
-
-<a id="project-layout"></a>
-## 📂 Project Layout
-
-```
-├── LICENSE
-├── mypy.ini
-├── pyproject.toml
-├── pytest.ini
-├── README.md
-├── requirements-dev.txt
-├── requirements.txt
-├── src
-│   └── dhis2_client
-│       ├── __init__.py
-│       ├── client.py
-│       ├── exceptions.py
-│       ├── logging_conf.py
-│       ├── settings.py
-│       ├── cli
-│       │   ├── __init__.py
-│       │   ├── app.py
-│       │   ├── output.py
-│       │   └── utils.py
-│       └── models
-│           ├── __init__.py
-│           ├── collections.py
-│           ├── common.py
-│           ├── data_element.py
-│           ├── data_set.py
-│           ├── data_value.py
-│           ├── data_value_set.py
-│           ├── organisation_unit.py
-│           ├── periods.py
-│           └── system.py
-└── tests
-    ├── integration
-    │   ├── conftest.py
-    │   ├── test_live_data_values.py
-    │   ├── test_live_endpoints.py
-    │   ├── test_live_full_stack.py
-    │   └── test_live_mutations.py
-    └── unit
-        ├── test_endpoints.py
-        ├── test_models.py
-        ├── test_paging.py
-        └── test_periods.py
-```
+---
 
 <a id="faq"></a>
 ## 🙋 FAQ
@@ -326,10 +278,14 @@ pytest -q -m integration
 - **Why generic endpoints?** Flexibility; typed wrappers where helpful.
 - **Why a CLI?** For quick inspection, automation, and integration with shell pipelines.
 
+---
+
 <a id="contributing"></a>
 ## 🤝 Contributing
 
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the onboarding guide, testing strategy, and contribution rules.
+See **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** for the onboarding guide, testing strategy, and contribution guidelines.
+
+---
 
 <a id="license"></a>
 ## 📜 License
