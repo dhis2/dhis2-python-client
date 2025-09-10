@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional, Dict
 from base64 import b64encode
+from typing import Dict, Optional
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Valid logging level names (keep this local to avoid circular imports)
+_VALID_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
 
 
 class Settings(BaseSettings):
@@ -17,6 +20,10 @@ class Settings(BaseSettings):
     username: Optional[str] = None
     password: Optional[SecretStr] = None
     token: Optional[SecretStr] = None  # DHIS2 Personal Access Token (PAT)
+
+    # --- logging (unified) ---
+    # Read from DHIS2_LOG_LEVEL via env, default WARNING
+    log_level: Optional[str] = "WARNING"
 
     # pydantic-settings config
     model_config = SettingsConfigDict(
@@ -34,6 +41,20 @@ class Settings(BaseSettings):
         if v is None or isinstance(v, SecretStr):
             return v
         return SecretStr(str(v))
+
+    # Normalize and validate log_level early (keeps DX clear)
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, v):
+        if v is None:
+            return "WARNING"
+        name = str(v).strip().upper()
+        if name not in _VALID_LOG_LEVELS:
+            raise ValueError(
+                f"Invalid DHIS2_LOG_LEVEL '{v}'. "
+                f"Allowed: {', '.join(sorted(_VALID_LOG_LEVELS))}"
+            )
+        return name
 
     # ---- robust accessors that tolerate str | SecretStr | None
     @staticmethod
@@ -60,6 +81,6 @@ class Settings(BaseSettings):
         if tok:
             return {"Authorization": f"ApiToken {tok}"}
         if self.username and self.password_value():
-            userpass = f"{self.username}:{self.password_value()}".encode("utf-8")
+            userpass = f"{self.username}:{self.password_value()}".encode()
             return {"Authorization": "Basic " + b64encode(userpass).decode("ascii")}
         return {}
