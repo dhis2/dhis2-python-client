@@ -34,3 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Paging helpers and period utilities  
 - Typed models for common DHIS2 resources  
 - Unit + integration tests  
+
+## [0.3.0] - 2025-09-11
+### Added
+- Programmatic + environment-based logging configuration.
+- Defaults to `WARNING` log level for quieter output.
+
+### Changed
+- Integration tests improved with better conflict summary.
+- Minor refactors and lint fixes.
