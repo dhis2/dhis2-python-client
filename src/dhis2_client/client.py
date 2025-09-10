@@ -126,7 +126,7 @@ class DHIS2AsyncClient:
         try:
             log_level = getattr(settings, "log_level", None)
             if log_level:
-                from .logging_conf import configure_logging  # optional dependency
+                from .logging_conf import configure_logging
                 configure_logging(str(log_level))
         except (ImportError, AttributeError) as e:
             # If structlog isn't available or Settings lacks the field, don't block client creation.
