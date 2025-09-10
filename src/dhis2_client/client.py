@@ -186,7 +186,7 @@ class DHIS2AsyncClient:
         try:
             return resp.json()
         except Exception as je:
-            raise DHIS2Error(message=f"Invalid JSON: {je}", status_code=resp.status_code, path=path) from None
+            raise DHIS2Error(message=f"Invalid JSON: {je}", status_code=resp.status_code, path=path) from je
 
     # Public HTTP helpers
     async def get(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
