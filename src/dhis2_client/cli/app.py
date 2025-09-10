@@ -160,8 +160,9 @@ def period_validate(
         if ok:
             console.print("valid")
             raise typer.Exit(code=0)
-        console.print("invalid")
-        raise typer.Exit(code=1)
+    except ValueError as e:
+        console.print(f"invalid: {e}")
+        raise typer.Exit(code=1) from e
     except Exception:
         if value and isinstance(value, str):
             console.print("valid (basic)")

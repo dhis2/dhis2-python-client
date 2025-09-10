@@ -9,6 +9,7 @@ from dhis2_client.models.periods import format_period
 
 from ._helpers import dump_json, summarize_dvs_import  # type: ignore
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_full_stack_create_delete_data_values(full_metadata_stack):

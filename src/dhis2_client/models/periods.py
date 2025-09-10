@@ -51,28 +51,28 @@ def validate_period(period_type: str, value: str) -> None:
         if not re.fullmatch(r"\d{8}", value):
             raise ValueError("Daily must be 'yyyyMMdd'")
         datetime.strptime(value, "%Y%m%d")
-        return
+        return True
 
     if period_type == "Monthly":
         if not re.fullmatch(r"\d{6}", value):
             raise ValueError("Monthly must be 'yyyyMM'")
         datetime.strptime(value, "%Y%m")
-        return
+        return True
 
     if period_type == "Quarterly":
         if not re.fullmatch(r"\d{4}Q[1-4]", value):
             raise ValueError("Quarterly must be 'yyyyQn'")
-        return
+        return True
 
     if period_type == "SixMonthly":
         if not re.fullmatch(r"\d{4}S[12]", value):
             raise ValueError("SixMonthly must be 'yyyySn'")
-        return
+        return True
 
     if period_type == "Yearly":
         if not _year_ok(value):
             raise ValueError("Yearly must be 'yyyy'")
-        return
+        return True
 
     if period_type == "BiMonthly":
         if not re.fullmatch(r"\d{6}B", value):
@@ -80,7 +80,7 @@ def validate_period(period_type: str, value: str) -> None:
         mm = int(value[4:6])
         if mm not in (1, 3, 5, 7, 9, 11):
             raise ValueError("BiMonthly MM must be odd (01,03,05,07,09,11)")
-        return
+        return True
 
     if period_type == "Weekly":
         m = re.fullmatch(r"(\d{4})W(\d{2})", value)
@@ -89,12 +89,12 @@ def validate_period(period_type: str, value: str) -> None:
         year, week = int(m.group(1)), int(m.group(2))
         if not _iso_week_ok(year, week):
             raise ValueError("Week number must be 01..53")
-        return
+        return True
 
     if period_type in {"BiWeekly"}:
         if not re.fullmatch(r"\d{4}BiW\d{1,2}", value):
             raise ValueError("BiWeekly must be 'yyyyBiWn'")
-        return
+        return True
 
     if period_type in {
         "WeeklyWednesday",
@@ -110,22 +110,22 @@ def validate_period(period_type: str, value: str) -> None:
         }[period_type]
         if not re.fullmatch(rf"\d{{4}}{dow}W\d{{1,2}}", value):
             raise ValueError(f"{period_type} must be 'yyyy{dow}Wn'")
-        return
+        return True
 
     if period_type == "QuarterlyNov":
         if not re.fullmatch(r"\d{4}NovQ[1-4]", value):
             raise ValueError("QuarterlyNov must be 'yyyyNovQn'")
-        return
+        return True
 
     if period_type == "SixMonthlyApril":
         if not re.fullmatch(r"\d{4}AprilS[12]", value):
             raise ValueError("SixMonthlyApril must be 'yyyyAprilSn'")
-        return
+        return True
 
     if period_type == "SixMonthlyNov":
         if not re.fullmatch(r"\d{4}NovS[12]", value):
             raise ValueError("SixMonthlyNov must be 'yyyyNovSn'")
-        return
+        return True
 
     if period_type in {
         "FinancialApril",
@@ -137,7 +137,7 @@ def validate_period(period_type: str, value: str) -> None:
         suffix = period_type.replace("Financial", "")
         if not re.fullmatch(rf"\d{{4}}{suffix}", value):
             raise ValueError(f"{period_type} must be 'yyyy{suffix}'")
-        return
+        return True
 
 
 def format_period(period_type: str, d: date) -> str:
