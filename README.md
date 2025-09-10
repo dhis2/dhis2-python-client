@@ -260,9 +260,9 @@ By default, `dhis2-client` only logs **warnings and errors**.
 
 You can increase verbosity with either:
 
-**Control log level via environment variable**
+**Environment variable**
 ```bash
-export LOG_LEVEL=INFO
+export DHIS2_LOG_LEVEL=INFO
 
 ```
 **Or programmatically**
@@ -270,12 +270,16 @@ export LOG_LEVEL=INFO
 from dhis2_client.logging_conf import configure_logging
 
 # Enable DEBUG/INFO logs
-configure_logging("INFO")
-
-# Include underlying httpx/respx request logs as well
-configure_logging("DEBUG", include_httpx=True)
+configure_logging(level="INFO")
 ```
-
+**Or programmatically via setting**
+```python
+from dhis2_client.logging_conf import configure_logging
+from dhis2_client import Settings
+settings = Settings( ...)
+# Enable DEBUG/INFO logs
+settings.log_level = "INFO"
+```
 
 ---
 

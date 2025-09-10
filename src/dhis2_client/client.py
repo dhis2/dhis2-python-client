@@ -100,28 +100,44 @@ class DHIS2AsyncClient:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> DHIS2AsyncClient:
-        """Construct a client from Settings (ApiToken header or Basic auth)."""
-        # Prefer a ready-made header from Settings (property or method)
+        """
+        Build a client from Settings.
+
+        Auth precedence:
+          1) If Settings.auth_header (property or method) returns a mapping, use that as headers
+          2) Else if username/password present, use Basic auth
+          3) Else no auth
+
+        Logging:
+          - If Settings has a 'log_level' attribute (e.g., "WARNING", "INFO"), try to configure structlog.
+          - If structlog or the attribute isn't available, skip quietly (debug log only).
+        """
+        # Prefer a ready-made Authorization header from Settings (property or method)
         headers = _get_auth_header_from_settings(settings)
 
-        # If no header was provided, fall back to building Basic auth
+        # Fallback to Basic auth if no header came from Settings
         auth: Optional[httpx.Auth] = None
-        if not headers and settings.username and getattr(settings, "password", None) is not None:
+        if not headers and getattr(settings, "username", None) and getattr(settings, "password", None) is not None:
             pwd = _reveal(settings.password)
-            if pwd:  # avoid passing None/empty
+            if pwd:
                 auth = httpx.BasicAuth(settings.username, pwd)
 
-        # Respect Settings.log_level if provided (default remains WARNING)
+        # Try optional logging setup from Settings.log_level (if provided)
         try:
-            from .logging_conf import configure_logging
-            configure_logging(settings.log_level)
-        except Exception:
-            pass
+            log_level = getattr(settings, "log_level", None)
+            if log_level:
+                from .logging_conf import configure_logging  # optional dependency
+                configure_logging(str(log_level))
+        except (ImportError, AttributeError) as e:
+            # If structlog isn't available or Settings lacks the field, don't block client creation.
+            # Emit a debug-level note via stdlib logging (won't show unless user enables DEBUG).
+            import logging as _logging
+            _logging.getLogger(__name__).debug("logging_setup_skipped", exc_info=e)
 
         return cls(
             base_url=str(settings.base_url or ""),
-            timeout=float(settings.timeout),
-            verify_ssl=bool(settings.verify_ssl),
+            timeout=float(getattr(settings, "timeout", 30.0)),
+            verify_ssl=bool(getattr(settings, "verify_ssl", True)),
             headers=headers or None,
             auth=auth,
         )
