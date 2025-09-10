@@ -158,7 +158,7 @@ class DHIS2AsyncClient:
             return resp
         except httpx.TransportError as te:
             logger.error("http.network_error", error=str(te), path=path, request_id=request_id)
-            raise NetworkError(message=str(te)) from None
+            raise NetworkError(message=str(te)) from te
 
     async def _request_json(self, method: str, path: str, **kwargs) -> Dict[str, Any]:
         """Send a request and parse JSON, raising typed errors on HTTP failures (incl. 3xx)."""
