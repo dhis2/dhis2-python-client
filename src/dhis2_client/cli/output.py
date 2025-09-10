@@ -7,7 +7,7 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from .utils import to_plain, make_json_safe
+from .utils import make_json_safe, to_plain
 
 console = Console()
 

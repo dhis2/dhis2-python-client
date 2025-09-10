@@ -256,10 +256,29 @@ dhis2-client period validate Monthly 202501
 <a id="logging"></a>
 ## 📝 Logging
 
-Emits compact JSON:
-```json
-{"event":"http.request","method":"GET","path":"/api/system/info","request_id":"..."}
-{"event":"http.response","status":200,"path":"/api/system/info","request_id":"..."}
+By default, `dhis2-client` only logs **warnings and errors**.
+
+You can increase verbosity with either:
+
+**Environment variable**
+```bash
+export DHIS2_LOG_LEVEL=INFO
+
+```
+**Or programmatically**
+```python
+from dhis2_client.logging_conf import configure_logging
+
+# Enable DEBUG/INFO logs
+configure_logging(level="INFO")
+```
+**Or programmatically via setting**
+```python
+from dhis2_client.logging_conf import configure_logging
+from dhis2_client import Settings
+settings = Settings( ...)
+# Enable DEBUG/INFO logs
+settings.log_level = "INFO"
 ```
 
 ---

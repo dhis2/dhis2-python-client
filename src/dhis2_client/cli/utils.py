@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator, Dict, Optional
 
-from typing import Any
-from typing import Any
 try:
     # Pydantic v2
     from pydantic import BaseModel as PydanticBaseModel  # type: ignore
@@ -15,7 +13,12 @@ def run(coro):
     return asyncio.run(coro)
 
 
-async def iter_pages(client, path: str, params: Optional[Dict[str, Any]] = None, page_size: int = 100) -> AsyncIterator[dict]:
+async def iter_pages(
+    client,
+    path: str,
+    params: Optional[Dict[str, Any]] = None,
+    page_size: int = 100,
+) -> AsyncIterator[dict]:
     """Generic pager: expects DHIS2's standard paging params.
 
     If your client exposes specific iterators, feel free to swap this
@@ -70,7 +73,13 @@ def to_plain(obj: Any) -> Any:
         return t(to_plain(v) for v in obj)
     return obj
 
-def build_settings_with_overrides(*, base_url: Optional[str], username: Optional[str], password: Optional[str], token: Optional[str]):
+def build_settings_with_overrides(
+    *,
+    base_url: Optional[str],
+    username: Optional[str],
+    password: Optional[str],
+    token: Optional[str],
+):
     """Create Settings(), then override fields if CLI flags provided.
 
     This keeps compatibility with existing Settings() behavior (env/.env loading)
