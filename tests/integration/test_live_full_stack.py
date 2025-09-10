@@ -7,6 +7,7 @@ from dhis2_client.exceptions import Conflict
 from dhis2_client.models import DataValue, DataValueSet
 from dhis2_client.models.periods import format_period
 
+from ._helpers import dump_json, summarize_dvs_import  # type: ignore
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -45,5 +46,19 @@ async def test_full_stack_create_delete_data_values(full_metadata_stack):
             assert isinstance(await client.post_data_value_set(dvs, import_strategy="DELETE"), dict)
         except Conflict as e:
             details = getattr(e, "details", {}) or {}
-            msg = details.get("message") or "conflict"
-            pytest.skip(f"Server rejected create/delete (skipping): {msg}")
+            line, compact = summarize_dvs_import(details)
+
+            # Always show a concise line in test output
+            print(f"[dvs-import-summary] {line}")
+
+            # Optional: verbose dump for CI debugging
+            if os.getenv("DVS_IMPORT_DEBUG", "").lower() in {"1", "true", "yes"}:
+                print(dump_json(details))
+
+            # Control behavior via env:
+            # - FAIL_ON_CONFLICT=1  -> hard fail with summary
+            # - otherwise           -> skip (keeps suite green on locked servers)
+            if os.getenv("FAIL_ON_CONFLICT", "").lower() in {"1", "true", "yes"}:
+                pytest.fail(f"DataValueSet import failed: {line}")
+            else:
+                pytest.skip(f"Server rejected create/delete (skipping): {line}")

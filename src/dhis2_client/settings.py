@@ -81,6 +81,6 @@ class Settings(BaseSettings):
         if tok:
             return {"Authorization": f"ApiToken {tok}"}
         if self.username and self.password_value():
-            userpass = f"{self.username}:{self.password_value()}".encode("utf-8")
+            userpass = f"{self.username}:{self.password_value()}".encode()
             return {"Authorization": "Basic " + b64encode(userpass).decode("ascii")}
         return {}
