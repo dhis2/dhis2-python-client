@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from .output import print_output
-from .utils import run, iter_pages, build_settings_with_overrides
+from .utils import build_settings_with_overrides, iter_pages, run
 
 # ---- Import your library -------------------------------------------------
 # TODO(repo): adjust imports if your package structure differs
@@ -27,8 +27,20 @@ def main(
     ctx: typer.Context,
     base_url: Optional[str] = typer.Option(None, "--base-url", envvar="DHIS2_BASE_URL", help="DHIS2 base URL, e.g. https://play.dhis2.org/dev"),
     username: Optional[str] = typer.Option(None, "--username", envvar="DHIS2_USERNAME", help="Username for basic auth"),
-    password: Optional[str] = typer.Option(None, "--password", envvar="DHIS2_PASSWORD", help="Password for basic auth", prompt=False, hide_input=True),
-    token: Optional[str] = typer.Option(None, "--token", envvar="DHIS2_TOKEN", help="API token / PAT (overrides basic auth if provided)"),
+    password: Optional[str] = typer.Option(
+        None,
+        "--password",
+        envvar="DHIS2_PASSWORD",
+        help="Password for basic auth",
+        prompt=False,
+        hide_input=True,
+    ),
+    token: Optional[str] = typer.Option(
+        None,
+        "--token",
+        envvar="DHIS2_TOKEN",
+        help="API token / PAT (overrides basic auth if provided)",
+    ),
 ):
     """Set connection/auth parameters for this invocation.
 
@@ -69,7 +81,7 @@ def system_info(
         print_output(data, output)
     except Exception as e:
         console.print(f"[red]Error[/red] {e}")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from None
 
 
 @app.command()
@@ -117,7 +129,7 @@ def get(
         print_output(data, output)
     except Exception as e:
         console.print(f"[red]Error[/red] {e}")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from None
 
 
 # ---- Period utilities ----------------------------------------------------
@@ -145,7 +157,7 @@ def period_validate(
     try:
         from dhis2_client.periods import validate_period  # type: ignore
         ok = validate_period(type, value)
-        if ok is True or ok == (True):
+        if ok:
             console.print("valid")
             raise typer.Exit(code=0)
         console.print("invalid")
@@ -153,9 +165,9 @@ def period_validate(
     except Exception:
         if value and isinstance(value, str):
             console.print("valid (basic)")
-            raise typer.Exit(code=0)
+            raise typer.Exit(code=0) from None
         console.print("invalid")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 @period.command("format")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional, Dict
 from base64 import b64encode
+from typing import Dict, Optional
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     username: Optional[str] = None
     password: Optional[SecretStr] = None
     token: Optional[SecretStr] = None  # DHIS2 Personal Access Token (PAT)
+
+    # --- logging ---
+    # Default WARNING; override by Settings(log_level="INFO") or env DHIS2_LOG_LEVEL=INFO
+    log_level: Optional[str] = None
 
     # pydantic-settings config
     model_config = SettingsConfigDict(
@@ -60,6 +64,6 @@ class Settings(BaseSettings):
         if tok:
             return {"Authorization": f"ApiToken {tok}"}
         if self.username and self.password_value():
-            userpass = f"{self.username}:{self.password_value()}".encode("utf-8")
+            userpass = f"{self.username}:{self.password_value()}".encode()
             return {"Authorization": "Basic " + b64encode(userpass).decode("ascii")}
         return {}

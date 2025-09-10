@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Mapping
+from typing import Any, AsyncIterator, Dict, Iterable, List, Mapping, Optional
 
 import httpx
+import structlog
 
 from .exceptions import DHIS2Error, NetworkError, error_from_status
-from .logging_conf import logger
 from .models import (
     DataElement,
     DataElements,
@@ -18,6 +18,8 @@ from .models import (
     SystemInfo,
 )
 from .settings import Settings
+
+logger = structlog.get_logger("dhis2_client")
 
 DEFAULT_HEADERS: Dict[str, str] = {
     "Accept": "application/json",
@@ -35,17 +37,38 @@ def _reveal(value):
 def _get_auth_header_from_settings(settings: Settings) -> Dict[str, str]:
     """
     Support both a property or a method named 'auth_header' on Settings.
-    Returns {} if not available or malformed.
     """
-    if hasattr(settings, "auth_header"):
-        try:
-            v = getattr(settings, "auth_header")
-            hdr = v() if callable(v) else v  # method vs property
+    # Prefer a property or a method named 'auth_header'
+    try:
+        v = settings.auth_header  # property access
+        if isinstance(v, Mapping):
+            return dict(v)
+    except Exception:
+        pass
+    try:
+        maybe_callable = getattr(settings, "auth_header", None)
+        if callable(maybe_callable):
+            hdr = maybe_callable()
             if isinstance(hdr, Mapping):
                 return dict(hdr)
-        except Exception:
-            pass
-    return {}
+    except Exception:
+        pass
+
+    # Prefer a property or a method named 'auth_header'
+    try:
+        v = settings.auth_header  # property access
+        if isinstance(v, Mapping):
+            return dict(v)
+    except Exception:
+        pass
+    try:
+        maybe_callable = getattr(settings, "auth_header", None)
+        if callable(maybe_callable):
+            hdr = maybe_callable()
+            if isinstance(hdr, Mapping):
+                return dict(hdr)
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------
 
@@ -100,6 +123,13 @@ class DHIS2AsyncClient:
             if pwd:  # avoid passing None/empty
                 auth = httpx.BasicAuth(settings.username, pwd)
 
+        # Respect Settings.log_level if provided (default remains WARNING)
+        try:
+            from .logging_conf import configure_logging
+            configure_logging(settings.log_level)
+        except Exception:
+            pass
+
         return cls(
             base_url=str(settings.base_url or ""),
             timeout=float(settings.timeout),
@@ -124,7 +154,7 @@ class DHIS2AsyncClient:
             return resp
         except httpx.TransportError as te:
             logger.error("http.network_error", error=str(te), path=path, request_id=request_id)
-            raise NetworkError(message=str(te)) from te
+            raise NetworkError(message=str(te)) from None
 
     async def _request_json(self, method: str, path: str, **kwargs) -> Dict[str, Any]:
         """Send a request and parse JSON, raising typed errors on HTTP failures (incl. 3xx)."""
@@ -152,11 +182,7 @@ class DHIS2AsyncClient:
         try:
             return resp.json()
         except Exception as je:
-            raise DHIS2Error(
-                message=f"Invalid JSON: {je}",
-                status_code=resp.status_code,
-                path=path,
-            ) from je
+            raise DHIS2Error(message=f"Invalid JSON: {je}", status_code=resp.status_code, path=path) from None
 
     # Public HTTP helpers
     async def get(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
