@@ -37,14 +37,17 @@ def _reveal(value):
 def _get_auth_header_from_settings(settings: Settings) -> Dict[str, str]:
     """
     Support both a property or a method named 'auth_header' on Settings.
+    Returns {} if nothing suitable is found.
     """
-    # Prefer a property or a method named 'auth_header'
+    # 1) Try attribute-as-property
     try:
-        v = settings.auth_header  # property access
+        v = settings.auth_header  # property
         if isinstance(v, Mapping):
             return dict(v)
     except Exception:
         pass
+
+    # 2) Try attribute-as-callable
     try:
         maybe_callable = getattr(settings, "auth_header", None)
         if callable(maybe_callable):
@@ -54,22 +57,7 @@ def _get_auth_header_from_settings(settings: Settings) -> Dict[str, str]:
     except Exception:
         pass
 
-    # Prefer a property or a method named 'auth_header'
-    try:
-        v = settings.auth_header  # property access
-        if isinstance(v, Mapping):
-            return dict(v)
-    except Exception:
-        pass
-    try:
-        maybe_callable = getattr(settings, "auth_header", None)
-        if callable(maybe_callable):
-            hdr = maybe_callable()
-            if isinstance(hdr, Mapping):
-                return dict(hdr)
-    except Exception:
-        pass
-
+    return {}
 # ---------------------------------------------------------------------
 
 
