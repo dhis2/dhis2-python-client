@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, AsyncIterator, Dict, Iterable, List, Mapping, Optional
+from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
 
 import httpx
 import structlog
 
+from ._base import DEFAULT_HEADERS, _get_auth_header_from_settings, _ParamsMixin, _reveal
 from .exceptions import DHIS2Error, NetworkError, error_from_status
 from .models import (
     DataElement,
@@ -21,48 +22,9 @@ from .settings import Settings
 
 logger = structlog.get_logger("dhis2_client")
 
-DEFAULT_HEADERS: Dict[str, str] = {
-    "Accept": "application/json",
-    "Content-Type": "application/json",
-}
 
-# -------------------------- NEW tiny helpers --------------------------
-
-def _reveal(value):
-    """Return plain string from SecretStr or pass through None/str."""
-    if value is None:
-        return None
-    return value.get_secret_value() if hasattr(value, "get_secret_value") else value
-
-def _get_auth_header_from_settings(settings: Settings) -> Dict[str, str]:
-    """
-    Support both a property or a method named 'auth_header' on Settings.
-    Returns {} if nothing suitable is found.
-    """
-    # 1) Try attribute-as-property
-    try:
-        v = settings.auth_header  # property
-        if isinstance(v, Mapping):
-            return dict(v)
-    except Exception:
-        pass
-
-    # 2) Try attribute-as-callable
-    try:
-        maybe_callable = getattr(settings, "auth_header", None)
-        if callable(maybe_callable):
-            hdr = maybe_callable()
-            if isinstance(hdr, Mapping):
-                return dict(hdr)
-    except Exception:
-        pass
-
-    return {}
-# ---------------------------------------------------------------------
-
-
-class DHIS2AsyncClient:
-    """Minimal async client for the DHIS2 Web API with paging helpers and typed parsing."""
+class DHIS2AsyncClient(_ParamsMixin):
+    """Async DHIS2 client with paging helpers and typed parsing."""
 
     def __init__(
         self,
@@ -100,44 +62,24 @@ class DHIS2AsyncClient:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> DHIS2AsyncClient:
-        """
-        Build a client from Settings.
+        # best-effort logging setup (don’t block)
+        try:
+            from .logging_conf import configure_logging
+            configure_logging(getattr(settings, "log_level", None))
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger(__name__).debug("logging_setup_skipped", exc_info=True)
 
-        Auth precedence:
-          1) If Settings.auth_header (property or method) returns a mapping, use that as headers
-          2) Else if username/password present, use Basic auth
-          3) Else no auth
-
-        Logging:
-          - If Settings has a 'log_level' attribute (e.g., "WARNING", "INFO"), try to configure structlog.
-          - If structlog or the attribute isn't available, skip quietly (debug log only).
-        """
-        # Prefer a ready-made Authorization header from Settings (property or method)
         headers = _get_auth_header_from_settings(settings)
-
-        # Fallback to Basic auth if no header came from Settings
         auth: Optional[httpx.Auth] = None
-        if not headers and getattr(settings, "username", None) and getattr(settings, "password", None) is not None:
+        if not headers and settings.username and getattr(settings, "password", None) is not None:
             pwd = _reveal(settings.password)
             if pwd:
                 auth = httpx.BasicAuth(settings.username, pwd)
-
-        # Try optional logging setup from Settings.log_level (if provided)
-        try:
-            log_level = getattr(settings, "log_level", None)
-            if log_level:
-                from .logging_conf import configure_logging
-                configure_logging(str(log_level))
-        except (ImportError, AttributeError) as e:
-            # If structlog isn't available or Settings lacks the field, don't block client creation.
-            # Emit a debug-level note via stdlib logging (won't show unless user enables DEBUG).
-            import logging as _logging
-            _logging.getLogger(__name__).debug("logging_setup_skipped", exc_info=e)
-
         return cls(
             base_url=str(settings.base_url or ""),
-            timeout=float(getattr(settings, "timeout", 30.0)),
-            verify_ssl=bool(getattr(settings, "verify_ssl", True)),
+            timeout=float(settings.timeout),
+            verify_ssl=bool(settings.verify_ssl),
             headers=headers or None,
             auth=auth,
         )
@@ -158,37 +100,27 @@ class DHIS2AsyncClient:
             return resp
         except httpx.TransportError as te:
             logger.error("http.network_error", error=str(te), path=path, request_id=request_id)
-            raise NetworkError(message=str(te)) from te
+            raise NetworkError(message=str(te)) from None
 
     async def _request_json(self, method: str, path: str, **kwargs) -> Dict[str, Any]:
-        """Send a request and parse JSON, raising typed errors on HTTP failures (incl. 3xx)."""
         resp = await self._request(method, path, **kwargs)
-
-        # Treat ALL non-2xx as errors (3xx, 4xx, 5xx)
         if not (200 <= resp.status_code < 300):
-            # Try to surface server-provided error info
             data = None
             msg = None
             try:
                 data = resp.json()
                 msg = data.get("message") or data.get("error")
             except Exception:
-                # include Location for 3xx to make redirects obvious
                 loc = resp.headers.get("Location")
-                if loc:
-                    msg = f"Redirected to: {loc}"
-                else:
-                    msg = resp.text or f"HTTP {resp.status_code}"
-
+                msg = f"Redirected to: {loc}" if loc else resp.text or f"HTTP {resp.status_code}"
             raise error_from_status(resp.status_code, msg, path=path, details=data)
-
-        # OK → parse JSON
         try:
             return resp.json()
         except Exception as je:
-            raise DHIS2Error(message=f"Invalid JSON: {je}", status_code=resp.status_code, path=path) from je
+            raise DHIS2Error(message=f"Invalid JSON: {je}", status_code=resp.status_code, path=path) from None
 
-    # Public HTTP helpers
+    # ----------------------------- Raw helpers -----------------------------
+
     async def get(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """GET path and return parsed JSON dict."""
         return await self._request_json("GET", path, params=params)
@@ -207,7 +139,7 @@ class DHIS2AsyncClient:
         """DELETE and return parsed JSON dict (if any)."""
         return await self._request_json("DELETE", path)
 
-    # ----------------------------- Paging helpers -----------------------------
+    # ----------------------------- Paging & typed -----------------------------
 
     async def _list_common(
         self,
@@ -217,13 +149,7 @@ class DHIS2AsyncClient:
         paging: bool = True,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        params: Dict[str, Any] = {
-            "fields": ",".join(fields),
-            "pageSize": page_size,
-            "paging": str(paging).lower(),
-        }
-        if extra_params:
-            params.update(extra_params)
+        params = self._mk_params(fields, page_size, paging, extra_params)
         return await self.get(f"/api/{resource}", params=params)
 
     async def _paginate(
@@ -234,15 +160,10 @@ class DHIS2AsyncClient:
         page_size: int = 100,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[List[Dict[str, Any]]]:
-        """Yield pages until pager indicates completion; supports pageCount and nextPage styles."""
         current_page = 1
         while True:
             data = await self._list_common(
-                resource,
-                fields,
-                page_size,
-                True,
-                {**(extra_params or {}), "page": current_page},
+                resource, fields, page_size, True, {**(extra_params or {}), "page": current_page}
             )
             items = data.get(collection_key, []) or []
             yield items
@@ -259,28 +180,10 @@ class DHIS2AsyncClient:
             else:
                 break
 
-    async def _list_all(
-        self,
-        resource: str,
-        collection_key: str,
-        fields: Iterable[str],
-        page_size: int = 100,
-        extra_params: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        """Collect all pages into a single list of raw dicts."""
-        all_items: List[Dict[str, Any]] = []
-        async for page_items in self._paginate(resource, collection_key, fields, page_size, extra_params):
-            all_items.extend(page_items)
-        return all_items
-
-    # ----------------------------- Typed convenience -----------------------------
-
     async def get_system_info(self) -> SystemInfo:
-        """GET /api/system/info"""
         data = await self.get("/api/system/info")
         return SystemInfo.model_validate(data)
 
-    # OrganisationUnits
     async def get_organisation_units(
         self,
         fields: Iterable[str],
@@ -299,10 +202,11 @@ class DHIS2AsyncClient:
             yield OrganisationUnits.model_validate({"organisationUnits": page}).organisationUnits
 
     async def list_all_organisation_units(self, fields: Iterable[str], page_size: int = 100) -> List[OrganisationUnit]:
-        raw = await self._list_all("organisationUnits", "organisationUnits", fields, page_size)
-        return OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
+        out: List[OrganisationUnit] = []
+        async for chunk in self.iter_organisation_units(fields, page_size):
+            out.extend(chunk)
+        return out
 
-    # DataElements
     async def get_data_elements(
         self,
         fields: Iterable[str],
@@ -317,10 +221,11 @@ class DHIS2AsyncClient:
             yield DataElements.model_validate({"dataElements": page}).dataElements
 
     async def list_all_data_elements(self, fields: Iterable[str], page_size: int = 100) -> List[DataElement]:
-        raw = await self._list_all("dataElements", "dataElements", fields, page_size)
-        return DataElements.model_validate({"dataElements": raw}).dataElements
+        out: List[DataElement] = []
+        async for chunk in self.iter_data_elements(fields, page_size):
+            out.extend(chunk)
+        return out
 
-    # DataSets
     async def get_data_sets(self, fields: Iterable[str], page_size: int = 100, paging: bool = True) -> List[DataSet]:
         data = await self._list_common("dataSets", fields, page_size, paging=paging)
         return DataSets.model_validate(data).dataSets
@@ -330,10 +235,11 @@ class DHIS2AsyncClient:
             yield DataSets.model_validate({"dataSets": page}).dataSets
 
     async def list_all_data_sets(self, fields: Iterable[str], page_size: int = 100) -> List[DataSet]:
-        raw = await self._list_all("dataSets", "dataSets", fields, page_size)
-        return DataSets.model_validate({"dataSets": raw}).dataSets
+        out: List[DataSet] = []
+        async for chunk in self.iter_data_sets(fields, page_size):
+            out.extend(chunk)
+        return out
 
-    # DataValueSets
     async def post_data_value_set(
         self,
         dvs: DataValueSet,
@@ -341,7 +247,6 @@ class DHIS2AsyncClient:
         import_strategy: Optional[str] = None,
         dry_run: bool = False,
     ) -> Dict[str, Any]:
-        """POST /api/dataValueSets with optional importStrategy and dryRun flags."""
         data = dvs.model_dump() if hasattr(dvs, "model_dump") else dvs
         params: Dict[str, Any] = {}
         if import_strategy:
