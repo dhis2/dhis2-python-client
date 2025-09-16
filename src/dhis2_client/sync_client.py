@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import httpx
 import structlog
@@ -21,6 +21,12 @@ from .models import (
 from .settings import Settings
 
 logger = structlog.get_logger("dhis2_client")
+
+# ----------------------------- JSON type aliases -----------------------------
+JSONScalar = Union[str, int, float, bool, None]
+JSONObj = Dict[str, "JSON"]
+JSONArray = List["JSON"]
+JSON = Union[JSONScalar, JSONObj, JSONArray]
 
 
 class DHIS2Client(_ParamsMixin):
@@ -104,37 +110,41 @@ class DHIS2Client(_ParamsMixin):
             logger.error("http.network_error", error=str(te), path=path, request_id=request_id)
             raise NetworkError(message=str(te)) from None
 
-    def _request_json(self, method: str, path: str, **kwargs) -> Dict[str, Any]:
+    def _request_json(self, method: str, path: str, **kwargs) -> JSONObj:
         resp = self._request(method, path, **kwargs)
         if not (200 <= resp.status_code < 300):
-            data = None
-            msg = None
+            data: Optional[JSON] = None
+            msg: Optional[str] = None
             try:
                 data = resp.json()
-                msg = data.get("message") or data.get("error")
+                if isinstance(data, dict):
+                    msg = data.get("message") or data.get("error")  # type: ignore[arg-type]
             except Exception:
                 loc = resp.headers.get("Location")
                 msg = f"Redirected to: {loc}" if loc else resp.text or f"HTTP {resp.status_code}"
             raise error_from_status(resp.status_code, msg, path=path, details=data)
         try:
-            return resp.json()
+            parsed = resp.json()
+            if not isinstance(parsed, dict):
+                raise TypeError(f"Expected JSON object, got {type(parsed).__name__}")
+            return parsed
         except Exception as je:
             raise DHIS2Error(message=f"Invalid JSON: {je}", status_code=resp.status_code, path=path) from None
 
     # ----------------------------- Raw helpers -----------------------------
 
-    def get(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def get(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> JSONObj:
         return self._request_json("GET", path, params=params)
 
-    def post_json(self, path: str, payload: Any) -> Dict[str, Any]:
+    def post_json(self, path: str, payload: Any) -> JSONObj:
         data = payload.model_dump() if hasattr(payload, "model_dump") else payload
         return self._request_json("POST", path, json=data)
 
-    def put_json(self, path: str, payload: Any) -> Dict[str, Any]:
+    def put_json(self, path: str, payload: Any) -> JSONObj:
         data = payload.model_dump() if hasattr(payload, "model_dump") else payload
         return self._request_json("PUT", path, json=data)
 
-    def delete(self, path: str) -> Dict[str, Any]:
+    def delete(self, path: str) -> JSONObj:
         return self._request_json("DELETE", path)
 
     # ----------------------------- Paging & typed -----------------------------
@@ -146,7 +156,7 @@ class DHIS2Client(_ParamsMixin):
         page_size: int = 100,
         paging: bool = True,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+    ) -> JSONObj:
         params = self._mk_params(fields, page_size, paging, extra_params)
         return self.get(f"/api/{resource}", params=params)
 
@@ -157,17 +167,19 @@ class DHIS2Client(_ParamsMixin):
         fields: Iterable[str],
         page_size: int = 100,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> List[List[Dict[str, Any]]]:
-        pages: List[List[Dict[str, Any]]] = []
+    ) -> List[List[JSONObj]]:
+        pages: List[List[JSONObj]] = []
         current_page = 1
         while True:
             data = self._list_common(resource, fields, page_size, True, {**(extra_params or {}), "page": current_page})
             items = data.get(collection_key, []) or []
-            pages.append(items)
+            if not isinstance(items, list):
+                raise DHIS2Error(message=f"Expected list at key '{collection_key}'", path=f"/api/{resource}")
+            pages.append([i for i in items if isinstance(i, dict)])
             pager = data.get("pager") or {}
-            page = pager.get("page")
-            page_count = pager.get("pageCount")
-            next_page_url = pager.get("nextPage") or data.get("nextPage")
+            page = pager.get("page") if isinstance(pager, dict) else None
+            page_count = pager.get("pageCount") if isinstance(pager, dict) else None
+            next_page_url = (pager.get("nextPage") if isinstance(pager, dict) else None) or data.get("nextPage")
             if page_count and page:
                 if page >= page_count:
                     break
@@ -185,19 +197,24 @@ class DHIS2Client(_ParamsMixin):
         fields: Iterable[str],
         page_size: int = 100,
         extra_params: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        all_items: List[Dict[str, Any]] = []
+    ) -> List[JSONObj]:
+        all_items: List[JSONObj] = []
         for page in self._paginate(resource, collection_key, fields, page_size, extra_params):
             all_items.extend(page)
         return all_items
 
-    # ---- typed ----
+    # ---- helper ----
 
-    def get_system_info(self, *, as_dict: bool = False):
+    @staticmethod
+    def _return_dict(as_dict: Optional[bool]) -> bool:
+        # Default is JSON/dict unless explicitly as_dict=False
+        return as_dict is not False
+
+    # ---- typed (minimal) ----
+
+    def get_system_info(self, *, as_dict: bool = True) -> JSONObj | SystemInfo:
         data = self.get("/api/system/info")
-        if as_dict:
-            return data
-        return SystemInfo.model_validate(data)
+        return data if self._return_dict(as_dict) else SystemInfo.model_validate(data)
 
     def get_organisation_units(
         self,
@@ -205,52 +222,53 @@ class DHIS2Client(_ParamsMixin):
         page_size: int = 100,
         paging: bool = True,
         *,
-        as_dict: bool = False,
-    ):
+        as_dict: bool = True,
+    ) -> List[JSONObj] | List[OrganisationUnit]:
         data = self._list_common("organisationUnits", fields, page_size, paging=paging)
-        if as_dict:
-            return data.get("organisationUnits", [])
+        if self._return_dict(as_dict):
+            items = data.get("organisationUnits", []) or []
+            return [i for i in items if isinstance(i, dict)]
         return OrganisationUnits.model_validate(data).organisationUnits
 
     def list_all_organisation_units(
-        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False
-    ) -> List[OrganisationUnit]:
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
+    ) -> List[JSONObj] | List[OrganisationUnit]:
         raw = self._list_all("organisationUnits", "organisationUnits", fields, page_size)
-        if as_dict:
-            return raw
-        return OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
+        return (
+            raw
+            if self._return_dict(as_dict)
+            else OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
+        )
 
     def get_data_elements(
-        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = False
-    ) -> List[DataElement]:
+        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = True
+    ) -> List[JSONObj] | List[DataElement]:
         data = self._list_common("dataElements", fields, page_size, paging=paging)
-        if as_dict:
-            return data.get("dataElements", [])
+        if self._return_dict(as_dict):
+            items = data.get("dataElements", []) or []
+            return [i for i in items if isinstance(i, dict)]
         return DataElements.model_validate(data).dataElements
 
     def list_all_data_elements(
-        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False
-    ) -> List[DataElement]:
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
+    ) -> List[JSONObj] | List[DataElement]:
         raw = self._list_all("dataElements", "dataElements", fields, page_size)
-        if as_dict:
-            return raw
-        return DataElements.model_validate({"dataElements": raw}).dataElements
+        return raw if self._return_dict(as_dict) else DataElements.model_validate({"dataElements": raw}).dataElements
 
     def get_data_sets(
-        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = False
-    ) -> List[DataSet]:
+        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = True
+    ) -> List[JSONObj] | List[DataSet]:
         data = self._list_common("dataSets", fields, page_size, paging=paging)
-        if as_dict:
-            return data.get("dataSets", [])
+        if self._return_dict(as_dict):
+            items = data.get("dataSets", []) or []
+            return [i for i in items if isinstance(i, dict)]
         return DataSets.model_validate(data).dataSets
 
     def list_all_data_sets(
-        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False
-    ) -> List[DataSet]:
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
+    ) -> List[JSONObj] | List[DataSet]:
         raw = self._list_all("dataSets", "dataSets", fields, page_size)
-        if as_dict:
-            return raw
-        return DataSets.model_validate({"dataSets": raw}).dataSets
+        return raw if self._return_dict(as_dict) else DataSets.model_validate({"dataSets": raw}).dataSets
 
     def post_data_value_set(
         self,
@@ -258,7 +276,7 @@ class DHIS2Client(_ParamsMixin):
         *,
         import_strategy: Optional[str] = None,
         dry_run: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> JSONObj:
         data = dvs.model_dump() if hasattr(dvs, "model_dump") else dvs
         params: Dict[str, Any] = {}
         if import_strategy:

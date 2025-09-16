@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, Optional
 
 import typer
+from pydantic import BaseModel  # <-- normalize models to JSON on output
 
 from dhis2_client import DHIS2AsyncClient, DHIS2Client
 
@@ -40,6 +41,17 @@ def _detect_array_key(obj: Dict[str, Any]) -> Optional[str]:
         if isinstance(v, list) and (not v or isinstance(v[0], dict)):
             return k
     return None
+
+
+def _to_plain_json(value: Any) -> Any:
+    """Convert Pydantic models (and containers) to plain JSON-compatible types."""
+    if isinstance(value, BaseModel):
+        return value.model_dump(by_alias=True, exclude_none=True)
+    if isinstance(value, dict):
+        return {k: _to_plain_json(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_to_plain_json(v) for v in value]
+    return value
 
 
 async def _async_get_all(
@@ -103,6 +115,7 @@ def get(
     array_key: Annotated[Optional[str], typer.Option(None, "--array-key", help="Collection key (e.g., users)")],
     param: Annotated[list[str], typer.Option([], "--param", help="Query key=value")],
     verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    as_dict: Annotated[bool, typer.Option(True, "--as-dict/--no-as-dict", help="Return dicts (default) or models")],
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -127,6 +140,7 @@ def get(
         all_pages=all_pages,
         password_stdin=password_stdin,
         array_key=array_key,
+        as_dict=as_dict,  # <-- pass through (typed commands can use this)
     )
     settings = make_settings(cfg)
     params = _parse_params(param)
@@ -151,7 +165,8 @@ def get(
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    render_output(data, output=cfg.output, fields=cfg.fields, jq=cfg.jq)
+    # Always normalize to JSON-safe values before rendering
+    render_output(_to_plain_json(data), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
 
 
 @http_app.command("post")
@@ -172,6 +187,7 @@ def post(
     profile: Annotated[Optional[str], typer.Option(None, "--profile")],
     json_body: Annotated[Optional[str], typer.Option(None, "--json", help="Raw JSON or @file.json")],
     verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    as_dict: Annotated[bool, typer.Option(True, "--as-dict/--no-as-dict", help="Return dicts (default) or models")],
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -196,6 +212,7 @@ def post(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
+        as_dict=as_dict,  # <-- pass through for typed commands elsewhere
     )
     settings = make_settings(cfg)
     payload = _load_json_arg(json_body)
@@ -215,7 +232,7 @@ def post(
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    render_output(res, output=cfg.output, fields=cfg.fields, jq=cfg.jq)
+    render_output(_to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
 
 
 @http_app.command("put")
@@ -236,6 +253,7 @@ def put(
     profile: Annotated[Optional[str], typer.Option(None, "--profile")],
     json_body: Annotated[Optional[str], typer.Option(None, "--json", help="Raw JSON or @file.json")],
     verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    as_dict: Annotated[bool, typer.Option(True, "--as-dict/--no-as-dict", help="Return dicts (default) or models")],
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -260,6 +278,7 @@ def put(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
+        as_dict=as_dict,
     )
     settings = make_settings(cfg)
     payload = _load_json_arg(json_body)
@@ -279,7 +298,7 @@ def put(
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    render_output(res, output=cfg.output, fields=cfg.fields, jq=cfg.jq)
+    render_output(_to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
 
 
 @http_app.command("delete")
@@ -299,6 +318,7 @@ def delete(
     jq: Annotated[Optional[str], typer.Option(None, "--jq")],
     profile: Annotated[Optional[str], typer.Option(None, "--profile")],
     verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    as_dict: Annotated[bool, typer.Option(True, "--as-dict/--no-as-dict", help="Return dicts (default) or models")],
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -323,6 +343,7 @@ def delete(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
+        as_dict=as_dict,
     )
     settings = make_settings(cfg)
 
@@ -341,4 +362,4 @@ def delete(
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    render_output(res, output=cfg.output, fields=cfg.fields, jq=cfg.jq)
+    render_output(_to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)

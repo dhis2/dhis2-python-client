@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Mapping, Tuple
 
+
 def extract_status(payload: dict) -> str:
     if payload.get("response", {}).get("status"):
         return payload["response"]["status"]
@@ -12,6 +13,7 @@ def extract_status(payload: dict) -> str:
         return payload["httpStatus"]
     return "UNKNOWN"
 
+
 def extract_conflicts(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     if payload.get("response", {}).get("conflicts"):
         return payload["response"]["conflicts"]
@@ -19,10 +21,12 @@ def extract_conflicts(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         return payload["conflicts"]
     return []
 
+
 def format_conflict(c: dict) -> str:
     obj = c.get("object", "?")
     msg = c.get("value") or c.get("message") or "?"
     return f"{obj}: {msg}"
+
 
 def dump_json(obj: Any) -> str:
     """
