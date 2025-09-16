@@ -52,7 +52,8 @@ class Settings(BaseSettings):
             return "WARNING"
         name = str(v).strip().upper()
         if name not in _VALID_LOG_LEVELS:
-            raise ValueError(f"Invalid DHIS2_LOG_LEVEL '{v}'. " f"Allowed: {', '.join(sorted(_VALID_LOG_LEVELS))}")
+            allowed = ", ".join(sorted(_VALID_LOG_LEVELS))
+            raise ValueError(f"Invalid DHIS2_LOG_LEVEL '{v}'. Allowed: {allowed}")
         return name
 
     # ---- robust accessors that tolerate str | SecretStr | None
