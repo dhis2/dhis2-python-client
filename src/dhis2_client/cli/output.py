@@ -55,6 +55,28 @@ def _to_plain(obj: Any) -> Any:
 
 
 def render_output(data: Any, *, output: str, fields: list[str] | None = None, jq: str | None = None):
+    """
+    Render data to the console in various output formats.
+
+    Supported output formats:
+        - "json": Pretty-prints the data as JSON.
+        - "yaml": Prints the data as YAML.
+        - "ndjson": Prints each item in a list as a separate JSON line (newline-delimited JSON).
+        - "table": Prints a table if the data is a list of dicts; otherwise, falls back to pretty JSON.
+
+    Parameters:
+        data (Any): The data to render. Can be any Python object; will be normalized to plain types.
+        output (str): The output format. One of "json", "yaml", "ndjson", or "table".
+        fields (list[str], optional): List of fields/columns to display in table output. If None, all fields are shown.
+        jq (str, optional): JMESPath query string to filter or transform the data before rendering.
+
+    Behavior:
+        - If `jq` is provided, applies the JMESPath query to the data.
+        - For "table" output, if the data is a list of dicts, displays as a table; otherwise, falls back to pretty JSON.
+        - For "ndjson", prints each item in a list as a separate JSON line; if not a list, prints the data as a single JSON line.
+        - For "json" and "yaml", prints the data in the respective format.
+
+    """
     # Normalize to plain Python types first
     data = _to_plain(data)
 
