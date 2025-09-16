@@ -211,7 +211,9 @@ class DHIS2AsyncClient(_ParamsMixin):
         async for page in self._paginate("organisationUnits", "organisationUnits", fields, page_size):
             if as_dict:
                 yield page
-            yield OrganisationUnits.model_validate({"organisationUnits": page}).organisationUnits
+            else:
+                yield OrganisationUnits.model_validate({"organisationUnits": page}).organisationUnits
+
 
     async def list_all_organisation_units(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False):
         if as_dict:
