@@ -85,7 +85,7 @@ class DHIS2AsyncClient(_ParamsMixin):
             from .logging_conf import configure_logging
 
             configure_logging(getattr(settings, "log_level", None))
-        except Exception:  # noqa: BLE001
+        except (ImportError, AttributeError):
             import logging as _logging
 
             _logging.getLogger(__name__).debug("logging_setup_skipped", exc_info=True)
