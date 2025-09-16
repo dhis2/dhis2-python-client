@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 import typer
-from .system import system_app
+
 from .http import http_app
 from .periods import periods_app
-from .resources.users import users_app
-from .resources.metadata import metadata_app
-from .resources.data_values import data_values_app
-from .resources.data_value_sets import dvs_app
 from .resources.bulk import bulk_app
-
+from .resources.data_value_sets import dvs_app
+from .resources.data_values import data_values_app
+from .resources.metadata import metadata_app
+from .resources.users import users_app
+from .system import system_app
 
 app = typer.Typer(
     add_completion=True,

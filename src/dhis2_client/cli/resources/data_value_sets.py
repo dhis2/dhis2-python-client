@@ -1,13 +1,16 @@
 from __future__ import annotations
-import sys, json
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from urllib.parse import urlencode
-import typer
 
-from ..common import resolve_settings, make_settings, run_async, CLISettings, print_http_error
-from ..output import render_output  # <-- added
+import json
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
+
+import typer
 from dhis2_client import DHIS2AsyncClient, DHIS2Client
+
+from ..common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
+from ..output import render_output  # <-- added
 
 dvs_app = typer.Typer(help="Data value set import/export (JSON)")
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
+
+import dataclasses
 import os
 import pathlib
-import dataclasses
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 # tomllib for 3.11+, tomli fallback for 3.10
 try:
@@ -13,7 +14,7 @@ except ModuleNotFoundError:
 from rich.console import Console
 
 # Adjust these imports if your module names differ
-from dhis2_client import Settings, DHIS2AsyncClient, DHIS2Client
+from dhis2_client import Settings
 
 DEFAULT_ENGINE = "sync"  # default mode if --engine omitted
 _console = Console()

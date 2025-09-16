@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 import sys
 from typing import Optional
+
 import typer
 
-from .common import resolve_settings, make_settings, run_async, CLISettings, print_http_error
-from .output import render_output
 from dhis2_client import DHIS2AsyncClient, DHIS2Client
+
+from .common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
+from .output import render_output
 
 system_app = typer.Typer(help="System helpers")
 

@@ -1,12 +1,13 @@
 from __future__ import annotations
-import sys
-from typing import Optional, Dict, Any, List
-from urllib.parse import urlencode
-import typer
 
-from ..common import resolve_settings, make_settings, run_async, CLISettings, print_http_error
-from ..output import render_output
+import sys
+from typing import Any, Dict, List, Optional
+
+import typer
 from dhis2_client import DHIS2AsyncClient, DHIS2Client
+
+from ..common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
+from ..output import render_output
 
 metadata_app = typer.Typer(help="Generic metadata operations for any DHIS2 collection")
 
@@ -314,9 +315,9 @@ def bulk_import(
     verbose: bool = typer.Option(False, "--verbose", help="Show full error details on failure."),
 ):
     """POST /api/metadata with a DHIS2 metadata JSON document."""
-    import json, gzip
+    import gzip
+    import json
     from pathlib import Path
-    from urllib.parse import urlencode
 
     def _read_json_from(src: str):
         if src == "-":

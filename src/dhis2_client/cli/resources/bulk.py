@@ -1,13 +1,17 @@
 from __future__ import annotations
-import sys, json, gzip
-from pathlib import Path
-from typing import Optional, Dict, Any, Literal
-from urllib.parse import urlencode
-import typer
 
-from ..common import resolve_settings, make_settings, run_async, CLISettings, print_http_error
-from ..output import render_output
+import gzip
+import json
+import sys
+from pathlib import Path
+from typing import Any, Dict, Literal, Optional
+from urllib.parse import urlencode
+
+import typer
 from dhis2_client import DHIS2AsyncClient, DHIS2Client
+
+from ..common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
+from ..output import render_output
 
 bulk_app = typer.Typer(help="Generic bulk JSON sender (POST/PUT/PATCH to any /api/* path)")
 

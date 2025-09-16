@@ -1,7 +1,8 @@
 from __future__ import annotations
-import sys
-import json
+
 import dataclasses
+import json
+import sys
 from enum import Enum
 from typing import Any
 
@@ -33,14 +34,14 @@ def _to_plain(obj: Any) -> Any:
         return _to_plain(obj.value)
 
     # Pydantic v2
-    if hasattr(obj, "model_dump") and callable(getattr(obj, "model_dump")):
+    if hasattr(obj, "model_dump") and callable(obj.model_dump):
         try:
             return _to_plain(obj.model_dump())
         except Exception:
             pass
 
     # Pydantic v1
-    if hasattr(obj, "dict") and callable(getattr(obj, "dict")):
+    if hasattr(obj, "dict") and callable(obj.dict):
         try:
             return _to_plain(obj.dict())
         except Exception:

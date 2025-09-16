@@ -1,6 +1,6 @@
 from __future__ import annotations
+
 import typer
-from datetime import date
 
 # Wire to your real helpers once ready:
 # from dhis2_client.models import validate_period, format_period
