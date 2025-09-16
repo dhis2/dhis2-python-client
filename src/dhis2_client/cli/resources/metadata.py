@@ -17,7 +17,7 @@ def _normalize_collection(res: Dict[str, Any], array_key: Optional[str]) -> list
         if array_key and array_key in res and isinstance(res[array_key], list):
             return res[array_key]
         for _k, v in res.items():
-            if isinstance(v, list) and (not v or isinstance(v[0], dict)):
+            if isinstance(v, list) and (not v or (v and isinstance(v[0], dict))):
                 return v
     return res if isinstance(res, list) else [res]
 
