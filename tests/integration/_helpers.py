@@ -19,6 +19,11 @@ def extract_conflicts(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         return payload["conflicts"]
     return []
 
+def format_conflict(c: dict) -> str:
+    obj = c.get("object", "?")
+    msg = c.get("value") or c.get("message") or "?"
+    return f"{obj}: {msg}"
+
 def dump_json(obj: Any) -> str:
     """
     Pretty-print an object as JSON (and return the string) to aid debugging
@@ -66,10 +71,7 @@ def summarize_dvs_import(payload: Mapping[str, Any] | None) -> Tuple[str, Dict[s
 
     # conflicts
     conflicts: List[Dict[str, Any]] = extract_conflicts(payload)
-    conflicts_txt = "; ".join(
-        f"{c.get('object', '?')}: {c.get('value') or c.get('message') or '?'}"
-        for c in conflicts
-    )
+    conflicts_txt = "; ".join(format_conflict(c) for c in conflicts)
 
     # server message if present
     msg = payload.get("message") or (payload.get("response") or {}).get("description") or ""
