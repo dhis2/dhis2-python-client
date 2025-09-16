@@ -30,7 +30,10 @@ class CLISettings:
     all_pages: bool = False
     password_stdin: bool = False
     array_key: Optional[str] = None
-    # Tri-state: None = follow Settings.return_models; True = dicts; False = models
+    # Tri-state override for return style:
+    #   None  -> follow Settings.return_models (env/config default)
+    #   True  -> return dict/JSON
+    #   False -> return Pydantic models
     as_dict: Optional[bool] = None
 
 
@@ -80,8 +83,8 @@ def make_settings(cfg: CLISettings) -> Settings:
     Build the Pydantic Settings model from CLISettings.
 
     If cfg.as_dict is None -> do not override Settings.return_models (use defaults/env).
-    If cfg.as_dict is True  -> return_models=False (dicts).
-    If cfg.as_dict is False -> return_models=True  (models).
+    If cfg.as_dict is True  -> return_models=False (dict/JSON).
+    If cfg.as_dict is False -> return_models=True  (Pydantic models).
     """
     kwargs = dict(
         base_url=cfg.base_url,
@@ -93,13 +96,13 @@ def make_settings(cfg: CLISettings) -> Settings:
         log_level=cfg.log_level or "WARNING",
     )
     if cfg.as_dict is not None:
-        kwargs["return_models"] = not cfg.as_dict
+        kwargs["return_models"] = (not cfg.as_dict)
     return Settings(**kwargs)
 
 
 def print_http_error(e: BaseException, *, verbose: bool = False) -> None:
     """
-    Compact error output that works with DHIS2Error/NetworkError and generic exceptions.
+    Compact error output for DHIS2Error/NetworkError and generic exceptions.
     """
     parts = []
     if isinstance(e, (DHIS2Error, NetworkError)):
