@@ -6,6 +6,7 @@ import sys
 from enum import Enum
 from typing import Any
 
+from .utils import make_json_safe, to_plain
 import jmespath
 import yaml
 from rich.console import Console
