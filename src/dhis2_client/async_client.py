@@ -257,7 +257,7 @@ class DHIS2AsyncClient(_ParamsMixin):
     ):
         if as_dict:
             out: List[Dict[str, Any]] = []
-            async for chunk in self.iter_data_elements(fields, page_size):
+            async for chunk in self.iter_data_elements(fields, page_size, as_dict=True):
                 out.extend(chunk)
             return out
         out_m: List[DataElement] = []
