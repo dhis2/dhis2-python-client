@@ -12,57 +12,6 @@ from ..output import render_output
 
 data_values_app = typer.Typer(help="Single data value helpers")
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _clean_params(d: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Remove keys with None / "" / "null" / "none" (case-insensitive).
-    Convert booleans to the DHIS2-typical "true"/"false" strings if needed.
-    """
-    cleaned: Dict[str, Any] = {}
-    for k, v in d.items():
-        if v is None:
-            continue
-        if isinstance(v, str) and v.strip().lower() in {"", "null", "none"}:
-            continue
-        if isinstance(v, bool):
-            cleaned[k] = "true" if v else "false"
-        else:
-            cleaned[k] = v
-    return cleaned
-
-
-def _build_query_params(
-    *,
-    de: str,
-    pe: str,
-    ou: str,
-    co: Optional[str] = None,
-    aoc: Optional[str] = None,
-    cc: Optional[str] = None,
-    cp: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    DHIS2 rules:
-    - If AOC is provided, don't send CC/CP at all.
-    - If AOC is not provided, CC/CP (classic form) may be used.
-    """
-    params: Dict[str, Any] = {"de": de, "pe": pe, "ou": ou}
-    if aoc:
-        params["aoc"] = aoc
-        # DO NOT send cc/cp when aoc is present
-    else:
-        if co:
-            params["co"] = co
-        if cc:
-            params["cc"] = cc
-        if cp:
-            params["cp"] = cp
-    return _clean_params(params)
-
-
 # NOTE: For read/delete we use /api/dataValues; for upsert we use /api/dataValueSets with a single item.
 
 @data_values_app.command("get")
@@ -111,7 +60,17 @@ def get_value(
     )
     settings = make_settings(cfg)
 
-    params = _build_query_params(de=de, pe=pe, ou=ou, co=co, aoc=aoc, cc=cc, cp=cp)
+    params: Dict[str, Any] = {"de": de, "pe": pe, "ou": ou}
+    if co:
+        params["co"] = co
+    if aoc:
+        params["aoc"] = aoc  # when aoc is provided, omit cc/cp entirely
+    else:
+        if cc:
+            params["cc"] = cc
+        if cp:
+            params["cp"] = cp
+
     path = "/api/dataValues"
 
     try:
@@ -178,20 +137,31 @@ def delete_value(
     )
     settings = make_settings(cfg)
 
-    params = _build_query_params(de=de, pe=pe, ou=ou, co=co, aoc=aoc, cc=cc, cp=cp)
+    params: Dict[str, Any] = {"de": de, "pe": pe, "ou": ou}
+    if co:
+        params["co"] = co
+    if aoc:
+        params["aoc"] = aoc
+    else:
+        if cc:
+            params["cc"] = cc
+        if cp:
+            params["cp"] = cp
+
     path = "/api/dataValues"
+    qs = urlencode(params)
 
     try:
         if cfg.engine == "async":
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
-                    return await client.delete(path + "?" + urlencode(params))
+                    return await client.delete(path + "?" + qs)
 
             res = run_async(_run())
         else:
             with DHIS2Client.from_settings(settings) as client:
-                res = client.delete(path + "?" + urlencode(params))
+                res = client.delete(path + "?" + qs)
     except Exception as e:
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
@@ -251,18 +221,15 @@ def upsert_value(
     settings = make_settings(cfg)
 
     dv: Dict[str, Any] = {"dataElement": de, "period": pe, "orgUnit": ou, "value": value}
-    # AOC and classic form are mutually exclusive
+    if co:
+        dv["categoryOptionCombo"] = co
     if aoc:
         dv["attributeOptionCombo"] = aoc
-    else:
-        if co:
-            dv["categoryOptionCombo"] = co
-    if comment and comment.strip():
+    if comment:
         dv["comment"] = comment
     if follow_up:
         dv["followUp"] = True
 
-    dv = _clean_params(dv)  # ensure no null/empty values
     payload = {"dataValues": [dv]}
 
     try:

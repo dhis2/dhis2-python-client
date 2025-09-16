@@ -30,10 +30,16 @@ JSON = Union[JSONScalar, JSONObj, JSONArray]
 
 
 class DHIS2Client(_ParamsMixin):
-    """Synchronous DHIS2 client mirroring the async surface where it fits.
+    """Synchronous DHIS2 client.
 
-    Typed methods return plain JSON/dicts by default (as_dict=True).
-    Set as_dict=False to return Pydantic models.
+    Default return behavior is controlled by Settings.return_models:
+      - return_models = False  → default is dict/JSON
+      - return_models = True   → default is Pydantic models
+
+    Each typed method accepts `as_dict: Optional[bool] = None` to override per call:
+      - as_dict=True  → force dict/JSON
+      - as_dict=False → force Pydantic models
+      - as_dict=None  → use Settings.return_models default
     """
 
     def __init__(
@@ -44,6 +50,7 @@ class DHIS2Client(_ParamsMixin):
         verify_ssl: bool = True,
         headers: Optional[Dict[str, str]] = None,
         auth: Optional[httpx.Auth] = None,
+        return_models: bool = False,  # global default if not using from_settings
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
@@ -53,6 +60,7 @@ class DHIS2Client(_ParamsMixin):
             self._headers.update(headers)
         self._auth = auth
         self._client: Optional[httpx.Client] = None
+        self._return_models = bool(return_models)
 
     def __enter__(self) -> DHIS2Client:
         if self._client is None:
@@ -94,6 +102,7 @@ class DHIS2Client(_ParamsMixin):
             verify_ssl=bool(settings.verify_ssl),
             headers=headers or None,
             auth=auth,
+            return_models=bool(getattr(settings, "return_models", False)),
         )
 
     # ----------------------------- HTTP core -----------------------------
@@ -122,7 +131,7 @@ class DHIS2Client(_ParamsMixin):
             try:
                 data = resp.json()
                 if isinstance(data, dict):
-                    msg = data.get("message") or data.get("error")  # type: ignore[arg-type]
+                    msg = data.get("message") or data.get("error")  # type: ignore[union-attr]
             except Exception:
                 loc = resp.headers.get("Location")
                 msg = f"Redirected to: {loc}" if loc else resp.text or f"HTTP {resp.status_code}"
@@ -207,12 +216,18 @@ class DHIS2Client(_ParamsMixin):
             all_items.extend(page)
         return all_items
 
-    # ---- typed (default: dict/JSON) ----
+    # ---- default-resolution helper ----
 
-    def get_system_info(self, *, as_dict: bool = True) -> JSONObj | SystemInfo:
-        """Return dict/JSON by default; set as_dict=False to return a SystemInfo model."""
+    def _resolve_as_dict(self, as_dict: Optional[bool]) -> bool:
+        # return_models=True → prefer models → as_dict=False
+        # return_models=False → prefer dict → as_dict=True
+        return as_dict if as_dict is not None else (not self._return_models)
+
+    # ---- typed (default from settings) ----
+
+    def get_system_info(self, *, as_dict: Optional[bool] = None) -> JSONObj | SystemInfo:
         data = self.get("/api/system/info")
-        return data if as_dict else SystemInfo.model_validate(data)
+        return data if self._resolve_as_dict(as_dict) else SystemInfo.model_validate(data)
 
     def get_organisation_units(
         self,
@@ -220,49 +235,55 @@ class DHIS2Client(_ParamsMixin):
         page_size: int = 100,
         paging: bool = True,
         *,
-        as_dict: bool = True,
+        as_dict: Optional[bool] = None,
     ) -> List[JSONObj] | List[OrganisationUnit]:
         data = self._list_common("organisationUnits", fields, page_size, paging=paging)
-        if as_dict:
+        if self._resolve_as_dict(as_dict):
             items = data.get("organisationUnits", []) or []
             return [i for i in items if isinstance(i, dict)]
         return OrganisationUnits.model_validate(data).organisationUnits
 
     def list_all_organisation_units(
-        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: Optional[bool] = None
     ) -> List[JSONObj] | List[OrganisationUnit]:
         raw = self._list_all("organisationUnits", "organisationUnits", fields, page_size)
-        return raw if as_dict else OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
+        return (
+            raw
+            if self._resolve_as_dict(as_dict)
+            else OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
+        )
 
     def get_data_elements(
-        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = True
+        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: Optional[bool] = None
     ) -> List[JSONObj] | List[DataElement]:
         data = self._list_common("dataElements", fields, page_size, paging=paging)
-        if as_dict:
+        if self._resolve_as_dict(as_dict):
             items = data.get("dataElements", []) or []
             return [i for i in items if isinstance(i, dict)]
         return DataElements.model_validate(data).dataElements
 
     def list_all_data_elements(
-        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: Optional[bool] = None
     ) -> List[JSONObj] | List[DataElement]:
         raw = self._list_all("dataElements", "dataElements", fields, page_size)
-        return raw if as_dict else DataElements.model_validate({"dataElements": raw}).dataElements
+        return (
+            raw if self._resolve_as_dict(as_dict) else DataElements.model_validate({"dataElements": raw}).dataElements
+        )
 
     def get_data_sets(
-        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = True
+        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: Optional[bool] = None
     ) -> List[JSONObj] | List[DataSet]:
         data = self._list_common("dataSets", fields, page_size, paging=paging)
-        if as_dict:
+        if self._resolve_as_dict(as_dict):
             items = data.get("dataSets", []) or []
             return [i for i in items if isinstance(i, dict)]
         return DataSets.model_validate(data).dataSets
 
     def list_all_data_sets(
-        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: Optional[bool] = None
     ) -> List[JSONObj] | List[DataSet]:
         raw = self._list_all("dataSets", "dataSets", fields, page_size)
-        return raw if as_dict else DataSets.model_validate({"dataSets": raw}).dataSets
+        return raw if self._resolve_as_dict(as_dict) else DataSets.model_validate({"dataSets": raw}).dataSets
 
     # ---- payload posts ----
 

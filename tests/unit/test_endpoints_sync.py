@@ -19,7 +19,7 @@ def test_get_system_info_sync():
                     },
                 )
             )
-            info = client.get_system_info()
+            info = client.get_system_info(as_dict=False)
             assert info.version == "2.40.0"
 
 
@@ -57,9 +57,9 @@ def test_paging_data_elements_two_pages_sync():
                 ]
             )
             # first-page call
-            items = client.get_data_elements(fields=["id", "name"], page_size=1, paging=True)
+            items = client.get_data_elements(fields=["id", "name"], page_size=1, paging=True, as_dict=False)
             assert len(items) == 1 and items[0].id == "de1"
 
             # all pages
-            all_items = client.list_all_data_elements(fields=["id", "name"], page_size=1)
+            all_items = client.list_all_data_elements(fields=["id", "name"], page_size=1, as_dict=False)
             assert [i.id for i in all_items] == ["de1", "de2"]

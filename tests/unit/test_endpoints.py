@@ -12,5 +12,5 @@ async def test_get_organisation_units_endpoint_and_parsing():
             route = router.get("/api/organisationUnits").mock(
                 return_value=httpx.Response(200, json={"organisationUnits": [{"id": "A", "name": "HQ"}]})
             )
-            ous = await client.get_organisation_units(fields=["id", "name"], page_size=2, paging=False)
+            ous = await client.get_organisation_units(fields=["id", "name"], page_size=2, paging=False, as_dict=False)
             assert route.called and len(ous) == 1 and ous[0].id == "A"

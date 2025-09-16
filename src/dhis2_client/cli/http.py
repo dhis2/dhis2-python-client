@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, Optional
 
 import typer
-from pydantic import BaseModel  # <-- normalize models to JSON on output
+from pydantic import BaseModel
 
 from dhis2_client import DHIS2AsyncClient, DHIS2Client
 
@@ -44,7 +44,7 @@ def _detect_array_key(obj: Dict[str, Any]) -> Optional[str]:
 
 
 def _to_plain_json(value: Any) -> Any:
-    """Convert Pydantic models (and containers) to plain JSON-compatible types."""
+    """Convert pydantic models/containers into plain JSON-compatible types."""
     if isinstance(value, BaseModel):
         return value.model_dump(by_alias=True, exclude_none=True)
     if isinstance(value, dict):
@@ -52,6 +52,30 @@ def _to_plain_json(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_to_plain_json(v) for v in value]
     return value
+
+
+# --- boolean parsing for --as-dict ------------------------------------------
+
+_TRUE = {"1", "true", "t", "yes", "y", "on"}
+_FALSE = {"0", "false", "f", "no", "n", "off"}
+
+
+def _parse_bool_opt(value: Optional[str]) -> Optional[bool]:
+    """
+    Parse an optional string into a boolean.
+    None     -> None (defer to Settings)
+    'true'   -> True
+    'false'  -> False
+    Accepts common variants: 1/0, yes/no, on/off, t/f (case-insensitive).
+    """
+    if value is None:
+        return None
+    v = value.strip().lower()
+    if v in _TRUE:
+        return True
+    if v in _FALSE:
+        return False
+    raise typer.BadParameter("as-dict must be a boolean: true/false")
 
 
 async def _async_get_all(
@@ -115,7 +139,15 @@ def get(
     array_key: Annotated[Optional[str], typer.Option(None, "--array-key", help="Collection key (e.g., users)")],
     param: Annotated[list[str], typer.Option([], "--param", help="Query key=value")],
     verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
-    as_dict: Annotated[bool, typer.Option(True, "--as-dict/--no-as-dict", help="Return dicts (default) or models")],
+    as_dict: Annotated[
+        Optional[str],
+        typer.Option(
+            None,
+            "--as-dict",
+            metavar="BOOL",
+            help="Boolean: true/false. Omit to use the default from Settings.return_models.",
+        ),
+    ],
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -140,7 +172,7 @@ def get(
         all_pages=all_pages,
         password_stdin=password_stdin,
         array_key=array_key,
-        as_dict=as_dict,  # <-- pass through (typed commands can use this)
+        as_dict=_parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
     params = _parse_params(param)
@@ -165,7 +197,6 @@ def get(
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    # Always normalize to JSON-safe values before rendering
     render_output(_to_plain_json(data), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
 
 
@@ -187,7 +218,15 @@ def post(
     profile: Annotated[Optional[str], typer.Option(None, "--profile")],
     json_body: Annotated[Optional[str], typer.Option(None, "--json", help="Raw JSON or @file.json")],
     verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
-    as_dict: Annotated[bool, typer.Option(True, "--as-dict/--no-as-dict", help="Return dicts (default) or models")],
+    as_dict: Annotated[
+        Optional[str],
+        typer.Option(
+            None,
+            "--as-dict",
+            metavar="BOOL",
+            help="Boolean: true/false. Omit to use the default from Settings.return_models.",
+        ),
+    ],
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -212,7 +251,7 @@ def post(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
-        as_dict=as_dict,  # <-- pass through for typed commands elsewhere
+        as_dict=_parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
     payload = _load_json_arg(json_body)
@@ -253,7 +292,15 @@ def put(
     profile: Annotated[Optional[str], typer.Option(None, "--profile")],
     json_body: Annotated[Optional[str], typer.Option(None, "--json", help="Raw JSON or @file.json")],
     verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
-    as_dict: Annotated[bool, typer.Option(True, "--as-dict/--no-as-dict", help="Return dicts (default) or models")],
+    as_dict: Annotated[
+        Optional[str],
+        typer.Option(
+            None,
+            "--as-dict",
+            metavar="BOOL",
+            help="Boolean: true/false. Omit to use the default from Settings.return_models.",
+        ),
+    ],
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -278,7 +325,7 @@ def put(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
-        as_dict=as_dict,
+        as_dict=_parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
     payload = _load_json_arg(json_body)
@@ -318,7 +365,15 @@ def delete(
     jq: Annotated[Optional[str], typer.Option(None, "--jq")],
     profile: Annotated[Optional[str], typer.Option(None, "--profile")],
     verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
-    as_dict: Annotated[bool, typer.Option(True, "--as-dict/--no-as-dict", help="Return dicts (default) or models")],
+    as_dict: Annotated[
+        Optional[str],
+        typer.Option(
+            None,
+            "--as-dict",
+            metavar="BOOL",
+            help="Boolean: true/false. Omit to use the default from Settings.return_models.",
+        ),
+    ],
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -343,7 +398,7 @@ def delete(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
-        as_dict=as_dict,
+        as_dict=_parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
 
