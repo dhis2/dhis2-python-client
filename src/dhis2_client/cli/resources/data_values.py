@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from typing import Annotated, Any, Dict, Optional
+from urllib.parse import urlencode
 
 import typer
 from dhis2_client import DHIS2AsyncClient, DHIS2Client
@@ -11,8 +12,58 @@ from ..output import render_output
 
 data_values_app = typer.Typer(help="Single data value helpers")
 
-# NOTE: For read/delete we use /api/dataValues; for upsert we use /api/dataValueSets with a single item.
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
+def _clean_params(d: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Remove keys with None / "" / "null" / "none" (case-insensitive).
+    Convert booleans to the DHIS2-typical "true"/"false" strings if needed.
+    """
+    cleaned: Dict[str, Any] = {}
+    for k, v in d.items():
+        if v is None:
+            continue
+        if isinstance(v, str) and v.strip().lower() in {"", "null", "none"}:
+            continue
+        if isinstance(v, bool):
+            cleaned[k] = "true" if v else "false"
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
+def _build_query_params(
+    *,
+    de: str,
+    pe: str,
+    ou: str,
+    co: Optional[str] = None,
+    aoc: Optional[str] = None,
+    cc: Optional[str] = None,
+    cp: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    DHIS2 rules:
+    - If AOC is provided, don't send CC/CP at all.
+    - If AOC is not provided, CC/CP (classic form) may be used.
+    """
+    params: Dict[str, Any] = {"de": de, "pe": pe, "ou": ou}
+    if aoc:
+        params["aoc"] = aoc
+        # DO NOT send cc/cp when aoc is present
+    else:
+        if co:
+            params["co"] = co
+        if cc:
+            params["cc"] = cc
+        if cp:
+            params["cp"] = cp
+    return _clean_params(params)
+
+
+# NOTE: For read/delete we use /api/dataValues; for upsert we use /api/dataValueSets with a single item.
 
 @data_values_app.command("get")
 def get_value(
@@ -27,7 +78,7 @@ def get_value(
     username: Annotated[Optional[str], typer.Option(None, "--username")],
     password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
     token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
+    password_stdin: Annotated[bool],  # --password-stdin
     engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
     profile: Annotated[Optional[str], typer.Option(None, "--profile")],
     output: Annotated[Optional[str], typer.Option("json", "--output")],
@@ -60,18 +111,7 @@ def get_value(
     )
     settings = make_settings(cfg)
 
-    params: Dict[str, Any] = {"de": de, "pe": pe, "ou": ou}
-    if co:
-        params["co"] = co
-    if aoc:
-        params["cc"] = "null"
-        params["cp"] = "null"
-        params["aoc"] = aoc  # DHIS2 interprets aoc when provided
-    if cc:
-        params["cc"] = cc
-    if cp:
-        params["cp"] = cp
-
+    params = _build_query_params(de=de, pe=pe, ou=ou, co=co, aoc=aoc, cc=cc, cp=cp)
     path = "/api/dataValues"
 
     try:
@@ -138,16 +178,7 @@ def delete_value(
     )
     settings = make_settings(cfg)
 
-    params: Dict[str, Any] = {"de": de, "pe": pe, "ou": ou}
-    if co:
-        params["co"] = co
-    if aoc:
-        params["aoc"] = aoc
-    if cc:
-        params["cc"] = cc
-    if cp:
-        params["cp"] = cp
-
+    params = _build_query_params(de=de, pe=pe, ou=ou, co=co, aoc=aoc, cc=cc, cp=cp)
     path = "/api/dataValues"
 
     try:
@@ -155,13 +186,14 @@ def delete_value(
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
-                    return await client.delete(path + "?" + "&".join(f"{k}={v}" for k, v in params.items()))
+                    # Some servers require querystring on DELETE
+                    return await client.delete(path + "?" + urlencode(params))
 
             res = run_async(_run())
         else:
             with DHIS2Client.from_settings(settings) as client:
-                # some servers require querystring on DELETE
-                res = client.delete(path + "?" + "&".join(f"{k}={v}" for k, v in params.items()))
+                # Some servers require querystring on DELETE
+                res = client.delete(path + "?" + urlencode(params))
     except Exception as e:
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
@@ -221,15 +253,18 @@ def upsert_value(
     settings = make_settings(cfg)
 
     dv: Dict[str, Any] = {"dataElement": de, "period": pe, "orgUnit": ou, "value": value}
-    if co:
-        dv["categoryOptionCombo"] = co
+    # AOC and classic form are mutually exclusive
     if aoc:
         dv["attributeOptionCombo"] = aoc
-    if comment:
+    else:
+        if co:
+            dv["categoryOptionCombo"] = co
+    if comment and comment.strip():
         dv["comment"] = comment
     if follow_up:
         dv["followUp"] = True
 
+    dv = _clean_params(dv)  # type: ignore[arg-type]
     payload = {"dataValues": [dv]}
 
     try:
