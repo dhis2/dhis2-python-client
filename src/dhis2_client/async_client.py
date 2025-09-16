@@ -180,8 +180,10 @@ class DHIS2AsyncClient(_ParamsMixin):
             else:
                 break
 
-    async def get_system_info(self) -> SystemInfo:
+    async def get_system_info(self, *, as_dict: bool = False):
         data = await self.get("/api/system/info")
+        if as_dict:
+            return data
         return SystemInfo.model_validate(data)
 
     async def get_organisation_units(
@@ -189,56 +191,127 @@ class DHIS2AsyncClient(_ParamsMixin):
         fields: Iterable[str],
         page_size: int = 100,
         paging: bool = True,
-    ) -> List[OrganisationUnit]:
+        *,
+        as_dict: bool = False,
+    ):
         data = await self._list_common("organisationUnits", fields, page_size, paging=paging)
+        if as_dict:
+            return data.get("organisationUnits", [])
         return OrganisationUnits.model_validate(data).organisationUnits
 
     async def iter_organisation_units(
         self,
         fields: Iterable[str],
         page_size: int = 100,
-    ) -> AsyncIterator[List[OrganisationUnit]]:
+        *,
+        as_dict: bool = False,
+    ) -> AsyncIterator[List[Any]]:
         async for page in self._paginate("organisationUnits", "organisationUnits", fields, page_size):
+            if as_dict:
+                yield page
             yield OrganisationUnits.model_validate({"organisationUnits": page}).organisationUnits
 
-    async def list_all_organisation_units(self, fields: Iterable[str], page_size: int = 100) -> List[OrganisationUnit]:
-        out: List[OrganisationUnit] = []
-        async for chunk in self.iter_organisation_units(fields, page_size):
-            out.extend(chunk)
-        return out
+    async def list_all_organisation_units(
+        self,
+        fields: Iterable[str],
+        page_size: int = 100,
+        *,
+        as_dict: bool = False
+    ):
+        if as_dict:
+            out: List[OrganisationUnit] = []
+            async for chunk in self.iter_organisation_units(fields, page_size):
+                out.extend(chunk)
+            return out
+        out_m: List[OrganisationUnit] = []
+        async for chunk in self.iter_organisation_units(fields, page_size, as_dict=False):
+            out_m.extend(chunk)
+        return OrganisationUnits.model_validate({"organisationUnits": out_m}).organisationUnits
 
     async def get_data_elements(
         self,
         fields: Iterable[str],
         page_size: int = 100,
         paging: bool = True,
-    ) -> List[DataElement]:
+        *,
+        as_dict: bool = False,
+    ):
         data = await self._list_common("dataElements", fields, page_size, paging=paging)
+        if as_dict:
+            return data.get("dataElements", []) or []
         return DataElements.model_validate(data).dataElements
 
-    async def iter_data_elements(self, fields: Iterable[str], page_size: int = 100) -> AsyncIterator[List[DataElement]]:
+    async def iter_data_elements(
+            self,
+            fields: Iterable[str],
+            page_size: int = 100,
+            *,
+            as_dict: bool = False
+    ) -> AsyncIterator[List[Any]]:
         async for page in self._paginate("dataElements", "dataElements", fields, page_size):
-            yield DataElements.model_validate({"dataElements": page}).dataElements
+            if as_dict:
+                yield page
+            else:
+                yield DataElements.model_validate({"dataElements": page}).dataElements
 
-    async def list_all_data_elements(self, fields: Iterable[str], page_size: int = 100) -> List[DataElement]:
-        out: List[DataElement] = []
-        async for chunk in self.iter_data_elements(fields, page_size):
-            out.extend(chunk)
-        return out
+    async def list_all_data_elements(
+            self,
+            fields: Iterable[str],
+            page_size: int = 100,
+            *,
+            as_dict: bool = False,
+    ):
+        if as_dict:
+            out: List[Dict[str, Any]] = []
+            async for chunk in self.iter_data_elements(fields, page_size):
+                out.extend(chunk)
+            return out
+        out_m: List[DataElement] = []
+        async for chunk in self.iter_data_elements(fields, page_size, as_dict=False):
+            out_m.extend(chunk)
+        return DataElements.model_validate({"dataElements": out_m}).dataElements
 
-    async def get_data_sets(self, fields: Iterable[str], page_size: int = 100, paging: bool = True) -> List[DataSet]:
+    async def get_data_sets(
+            self,
+            fields: Iterable[str],
+            page_size: int = 100,
+            paging: bool = True,
+            *, as_dict: bool = False,
+    ):
         data = await self._list_common("dataSets", fields, page_size, paging=paging)
+        if as_dict:
+            return data.get("dataSets", []) or []
         return DataSets.model_validate(data).dataSets
 
-    async def iter_data_sets(self, fields: Iterable[str], page_size: int = 100) -> AsyncIterator[List[DataSet]]:
+    async def iter_data_sets(
+            self,
+            fields: Iterable[str],
+            page_size: int = 100,
+            *,
+            as_dict: bool = False
+    ) -> AsyncIterator[List[Any]]:
         async for page in self._paginate("dataSets", "dataSets", fields, page_size):
-            yield DataSets.model_validate({"dataSets": page}).dataSets
+            if as_dict:
+                yield page
+            else:
+                yield DataSets.model_validate({"dataSets": page}).dataSets
 
-    async def list_all_data_sets(self, fields: Iterable[str], page_size: int = 100) -> List[DataSet]:
-        out: List[DataSet] = []
-        async for chunk in self.iter_data_sets(fields, page_size):
-            out.extend(chunk)
-        return out
+    async def list_all_data_sets(
+            self,
+            fields: Iterable[str],
+            page_size: int = 100,
+            *,
+            as_dict: bool = False
+    ):
+        if as_dict:
+            out: List[Dict[str, Any]] = []
+            async for chunk in self._paginate("dataSets", "dataSets", fields, page_size,):
+                out.extend(chunk)
+            return out
+        out_m: List[DataSet] = []
+        async for chunk in self.iter_data_sets(fields, page_size, as_dict=False):
+            out_m.extend(chunk)
+        return out_m
 
     async def post_data_value_set(
         self,

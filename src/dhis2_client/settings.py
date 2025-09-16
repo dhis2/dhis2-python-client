@@ -34,6 +34,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    return_models: bool = False  # if True, return pydantic models from client methods
     # Always coerce raw env/CLI strings into SecretStr
     @field_validator("password", "token", mode="before")
     @classmethod

@@ -121,18 +121,18 @@ class DHIS2Client(_ParamsMixin):
 
     # ----------------------------- Raw helpers -----------------------------
 
-    def get_sync(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def get(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._request_json("GET", path, params=params)
 
-    def post_json_sync(self, path: str, payload: Any) -> Dict[str, Any]:
+    def post_json(self, path: str, payload: Any) -> Dict[str, Any]:
         data = payload.model_dump() if hasattr(payload, "model_dump") else payload
         return self._request_json("POST", path, json=data)
 
-    def put_json_sync(self, path: str, payload: Any) -> Dict[str, Any]:
+    def put_json(self, path: str, payload: Any) -> Dict[str, Any]:
         data = payload.model_dump() if hasattr(payload, "model_dump") else payload
         return self._request_json("PUT", path, json=data)
 
-    def delete_sync(self, path: str) -> Dict[str, Any]:
+    def delete(self, path: str) -> Dict[str, Any]:
         return self._request_json("DELETE", path)
 
     # ----------------------------- Paging & typed -----------------------------
@@ -146,7 +146,7 @@ class DHIS2Client(_ParamsMixin):
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         params = self._mk_params(fields, page_size, paging, extra_params)
-        return self.get_sync(f"/api/{resource}", params=params)
+        return self.get(f"/api/{resource}", params=params)
 
     def _paginate(
         self,
@@ -193,37 +193,53 @@ class DHIS2Client(_ParamsMixin):
 
     # ---- typed ----
 
-    def get_system_info(self) -> SystemInfo:
-        data = self.get_sync("/api/system/info")
+    def get_system_info(self, *, as_dict: bool = False):
+        data = self.get("/api/system/info")
+        if as_dict:
+            return data
         return SystemInfo.model_validate(data)
-
+    
     def get_organisation_units(
         self,
         fields: Iterable[str],
         page_size: int = 100,
         paging: bool = True,
-    ) -> List[OrganisationUnit]:
+        *,
+        as_dict: bool = False,
+    ):
         data = self._list_common("organisationUnits", fields, page_size, paging=paging)
+        if as_dict:
+            return data.get("organisationUnits", [])
         return OrganisationUnits.model_validate(data).organisationUnits
 
-    def list_all_organisation_units(self, fields: Iterable[str], page_size: int = 100) -> List[OrganisationUnit]:
+    def list_all_organisation_units(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False) -> List[OrganisationUnit]:
         raw = self._list_all("organisationUnits", "organisationUnits", fields, page_size)
+        if as_dict:
+            return raw
         return OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
 
-    def get_data_elements(self, fields: Iterable[str], page_size: int = 100, paging: bool = True) -> List[DataElement]:
+    def get_data_elements(self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = False) -> List[DataElement]:
         data = self._list_common("dataElements", fields, page_size, paging=paging)
+        if as_dict:
+            return data.get("dataElements", [])
         return DataElements.model_validate(data).dataElements
 
-    def list_all_data_elements(self, fields: Iterable[str], page_size: int = 100) -> List[DataElement]:
+    def list_all_data_elements(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False) -> List[DataElement]:
         raw = self._list_all("dataElements", "dataElements", fields, page_size)
+        if as_dict:
+            return raw
         return DataElements.model_validate({"dataElements": raw}).dataElements
 
-    def get_data_sets(self, fields: Iterable[str], page_size: int = 100, paging: bool = True) -> List[DataSet]:
+    def get_data_sets(self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = False) -> List[DataSet]:
         data = self._list_common("dataSets", fields, page_size, paging=paging)
+        if as_dict:
+            return data.get("dataSets", [])
         return DataSets.model_validate(data).dataSets
 
-    def list_all_data_sets(self, fields: Iterable[str], page_size: int = 100) -> List[DataSet]:
+    def list_all_data_sets(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False) -> List[DataSet]:
         raw = self._list_all("dataSets", "dataSets", fields, page_size)
+        if as_dict:
+            return raw
         return DataSets.model_validate({"dataSets": raw}).dataSets
 
     def post_data_value_set(
