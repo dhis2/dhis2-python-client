@@ -28,7 +28,7 @@ def _parse_filters(filters: List[str]) -> List[str]:
         parts = f.split(":", 2)
         if len(parts) < 3:
             raise typer.BadParameter(f"Invalid --filter '{f}'. Expected key:op:value")
-        out.append(f"{parts[0]}:{parts[1]}:{parts[2]}")
+        out.append(f)
     return out
 
 
