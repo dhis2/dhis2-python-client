@@ -73,7 +73,8 @@ def render_output(data: Any, *, output: str, fields: list[str] | None = None, jq
     Behavior:
         - If `jq` is provided, applies the JMESPath query to the data.
         - For "table" output, if the data is a list of dicts, displays as a table; otherwise, falls back to pretty JSON.
-        - For "ndjson", prints each item in a list as a separate JSON line; if not a list, prints the data as a single JSON line.
+        - For "ndjson", prints each item in a list as a separate JSON line; if not a list, prints the data as a single
+        JSON line.
         - For "json" and "yaml", prints the data in the respective format.
 
     """

@@ -96,7 +96,7 @@ def make_settings(cfg: CLISettings) -> Settings:
         log_level=cfg.log_level or "WARNING",
     )
     if cfg.as_dict is not None:
-        kwargs["return_models"] = (not cfg.as_dict)
+        kwargs["return_models"] = not cfg.as_dict
     return Settings(**kwargs)
 
 

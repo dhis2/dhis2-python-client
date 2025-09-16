@@ -14,6 +14,7 @@ data_values_app = typer.Typer(help="Single data value helpers")
 
 # NOTE: For read/delete we use /api/dataValues; for upsert we use /api/dataValueSets with a single item.
 
+
 @data_values_app.command("get")
 def get_value(
     de: Annotated[str, typer.Option(..., "--de", help="Data Element ID")],
