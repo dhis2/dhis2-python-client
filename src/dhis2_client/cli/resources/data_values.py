@@ -78,7 +78,7 @@ def get_value(
     username: Annotated[Optional[str], typer.Option(None, "--username")],
     password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
     token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool],  # --password-stdin
+    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
     engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
     profile: Annotated[Optional[str], typer.Option(None, "--profile")],
     output: Annotated[Optional[str], typer.Option("json", "--output")],
@@ -186,13 +186,11 @@ def delete_value(
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
-                    # Some servers require querystring on DELETE
                     return await client.delete(path + "?" + urlencode(params))
 
             res = run_async(_run())
         else:
             with DHIS2Client.from_settings(settings) as client:
-                # Some servers require querystring on DELETE
                 res = client.delete(path + "?" + urlencode(params))
     except Exception as e:
         print_http_error(e, verbose=verbose)
@@ -264,7 +262,7 @@ def upsert_value(
     if follow_up:
         dv["followUp"] = True
 
-    dv = _clean_params(dv)  # type: ignore[arg-type]
+    dv = _clean_params(dv)  # ensure no null/empty values
     payload = {"dataValues": [dv]}
 
     try:
