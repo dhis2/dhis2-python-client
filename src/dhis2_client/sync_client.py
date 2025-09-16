@@ -30,7 +30,11 @@ JSON = Union[JSONScalar, JSONObj, JSONArray]
 
 
 class DHIS2Client(_ParamsMixin):
-    """Synchronous DHIS2 client mirroring the async surface where it fits."""
+    """Synchronous DHIS2 client mirroring the async surface where it fits.
+
+    Typed methods return plain JSON/dicts by default (as_dict=True).
+    Set as_dict=False to return Pydantic models.
+    """
 
     def __init__(
         self,
@@ -203,18 +207,12 @@ class DHIS2Client(_ParamsMixin):
             all_items.extend(page)
         return all_items
 
-    # ---- helper ----
-
-    @staticmethod
-    def _return_dict(as_dict: Optional[bool]) -> bool:
-        # Default is JSON/dict unless explicitly as_dict=False
-        return as_dict is not False
-
-    # ---- typed (minimal) ----
+    # ---- typed (default: dict/JSON) ----
 
     def get_system_info(self, *, as_dict: bool = True) -> JSONObj | SystemInfo:
+        """Return dict/JSON by default; set as_dict=False to return a SystemInfo model."""
         data = self.get("/api/system/info")
-        return data if self._return_dict(as_dict) else SystemInfo.model_validate(data)
+        return data if as_dict else SystemInfo.model_validate(data)
 
     def get_organisation_units(
         self,
@@ -225,7 +223,7 @@ class DHIS2Client(_ParamsMixin):
         as_dict: bool = True,
     ) -> List[JSONObj] | List[OrganisationUnit]:
         data = self._list_common("organisationUnits", fields, page_size, paging=paging)
-        if self._return_dict(as_dict):
+        if as_dict:
             items = data.get("organisationUnits", []) or []
             return [i for i in items if isinstance(i, dict)]
         return OrganisationUnits.model_validate(data).organisationUnits
@@ -234,17 +232,13 @@ class DHIS2Client(_ParamsMixin):
         self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
     ) -> List[JSONObj] | List[OrganisationUnit]:
         raw = self._list_all("organisationUnits", "organisationUnits", fields, page_size)
-        return (
-            raw
-            if self._return_dict(as_dict)
-            else OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
-        )
+        return raw if as_dict else OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
 
     def get_data_elements(
         self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = True
     ) -> List[JSONObj] | List[DataElement]:
         data = self._list_common("dataElements", fields, page_size, paging=paging)
-        if self._return_dict(as_dict):
+        if as_dict:
             items = data.get("dataElements", []) or []
             return [i for i in items if isinstance(i, dict)]
         return DataElements.model_validate(data).dataElements
@@ -253,13 +247,13 @@ class DHIS2Client(_ParamsMixin):
         self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
     ) -> List[JSONObj] | List[DataElement]:
         raw = self._list_all("dataElements", "dataElements", fields, page_size)
-        return raw if self._return_dict(as_dict) else DataElements.model_validate({"dataElements": raw}).dataElements
+        return raw if as_dict else DataElements.model_validate({"dataElements": raw}).dataElements
 
     def get_data_sets(
         self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = True
     ) -> List[JSONObj] | List[DataSet]:
         data = self._list_common("dataSets", fields, page_size, paging=paging)
-        if self._return_dict(as_dict):
+        if as_dict:
             items = data.get("dataSets", []) or []
             return [i for i in items if isinstance(i, dict)]
         return DataSets.model_validate(data).dataSets
@@ -268,7 +262,9 @@ class DHIS2Client(_ParamsMixin):
         self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
     ) -> List[JSONObj] | List[DataSet]:
         raw = self._list_all("dataSets", "dataSets", fields, page_size)
-        return raw if self._return_dict(as_dict) else DataSets.model_validate({"dataSets": raw}).dataSets
+        return raw if as_dict else DataSets.model_validate({"dataSets": raw}).dataSets
+
+    # ---- payload posts ----
 
     def post_data_value_set(
         self,

@@ -30,7 +30,11 @@ JSON = Union[JSONScalar, JSONObj, JSONArray]
 
 
 class DHIS2AsyncClient(_ParamsMixin):
-    """Async DHIS2 client with paging helpers and typed parsing."""
+    """Async DHIS2 client with paging helpers and typed parsing.
+
+    Typed methods return plain JSON/dicts by default (as_dict=True).
+    Set as_dict=False to return Pydantic models.
+    """
 
     def __init__(
         self,
@@ -195,18 +199,12 @@ class DHIS2AsyncClient(_ParamsMixin):
             else:
                 break
 
-    # ---- helper ----
-
-    @staticmethod
-    def _return_dict(as_dict: Optional[bool]) -> bool:
-        # Default is JSON/dict unless explicitly as_dict=False
-        return as_dict is not False
-
-    # ---- typed (minimal) ----
+    # ---- typed (default: dict/JSON) ----
 
     async def get_system_info(self, *, as_dict: bool = True) -> JSONObj | SystemInfo:
+        """Return dict/JSON by default; set as_dict=False to return a SystemInfo model."""
         data = await self.get("/api/system/info")
-        return data if self._return_dict(as_dict) else SystemInfo.model_validate(data)
+        return data if as_dict else SystemInfo.model_validate(data)
 
     async def get_organisation_units(
         self,
@@ -217,7 +215,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         as_dict: bool = True,
     ) -> List[JSONObj] | List[OrganisationUnit]:
         data = await self._list_common("organisationUnits", fields, page_size, paging=paging)
-        if self._return_dict(as_dict):
+        if as_dict:
             items = data.get("organisationUnits", []) or []
             return [i for i in items if isinstance(i, dict)]
         return OrganisationUnits.model_validate(data).organisationUnits
@@ -230,7 +228,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         as_dict: bool = True,
     ) -> AsyncIterator[List[JSONObj] | List[OrganisationUnit]]:
         async for page in self._paginate("organisationUnits", "organisationUnits", fields, page_size):
-            if self._return_dict(as_dict):
+            if as_dict:
                 yield page
             else:
                 yield OrganisationUnits.model_validate({"organisationUnits": page}).organisationUnits
@@ -238,7 +236,7 @@ class DHIS2AsyncClient(_ParamsMixin):
     async def list_all_organisation_units(
         self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
     ) -> List[JSONObj] | List[OrganisationUnit]:
-        if self._return_dict(as_dict):
+        if as_dict:
             out: List[JSONObj] = []
             async for chunk in self.iter_organisation_units(fields, page_size, as_dict=True):
                 out.extend(chunk)  # type: ignore[arg-type]
@@ -246,7 +244,6 @@ class DHIS2AsyncClient(_ParamsMixin):
         out_m: List[OrganisationUnit] = []
         async for chunk in self.iter_organisation_units(fields, page_size, as_dict=False):
             out_m.extend(chunk)
-        # keep parity with sync: validate the final list through the collection model
         return OrganisationUnits.model_validate({"organisationUnits": out_m}).organisationUnits
 
     async def get_data_elements(
@@ -258,7 +255,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         as_dict: bool = True,
     ) -> List[JSONObj] | List[DataElement]:
         data = await self._list_common("dataElements", fields, page_size, paging=paging)
-        if self._return_dict(as_dict):
+        if as_dict:
             items = data.get("dataElements", []) or []
             return [i for i in items if isinstance(i, dict)]
         return DataElements.model_validate(data).dataElements
@@ -267,7 +264,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
     ) -> AsyncIterator[List[JSONObj] | List[DataElement]]:
         async for page in self._paginate("dataElements", "dataElements", fields, page_size):
-            if self._return_dict(as_dict):
+            if as_dict:
                 yield page
             else:
                 yield DataElements.model_validate({"dataElements": page}).dataElements
@@ -279,7 +276,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         *,
         as_dict: bool = True,
     ) -> List[JSONObj] | List[DataElement]:
-        if self._return_dict(as_dict):
+        if as_dict:
             out: List[JSONObj] = []
             async for chunk in self.iter_data_elements(fields, page_size, as_dict=True):
                 out.extend(chunk)  # type: ignore[arg-type]
@@ -298,7 +295,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         as_dict: bool = True,
     ) -> List[JSONObj] | List[DataSet]:
         data = await self._list_common("dataSets", fields, page_size, paging=paging)
-        if self._return_dict(as_dict):
+        if as_dict:
             items = data.get("dataSets", []) or []
             return [i for i in items if isinstance(i, dict)]
         return DataSets.model_validate(data).dataSets
@@ -307,7 +304,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
     ) -> AsyncIterator[List[JSONObj] | List[DataSet]]:
         async for page in self._paginate("dataSets", "dataSets", fields, page_size):
-            if self._return_dict(as_dict):
+            if as_dict:
                 yield page
             else:
                 yield DataSets.model_validate({"dataSets": page}).dataSets
@@ -315,7 +312,7 @@ class DHIS2AsyncClient(_ParamsMixin):
     async def list_all_data_sets(
         self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = True
     ) -> List[JSONObj] | List[DataSet]:
-        if self._return_dict(as_dict):
+        if as_dict:
             out: List[JSONObj] = []
             async for chunk in self.iter_data_sets(fields, page_size, as_dict=True):
                 out.extend(chunk)  # type: ignore[arg-type]
