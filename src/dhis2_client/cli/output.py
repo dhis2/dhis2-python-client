@@ -63,7 +63,7 @@ def render_output(data: Any, *, output: str, fields: list[str] | None = None, jq
         try:
             data = jmespath.search(jq, data)
         except Exception as e:
-            _console.print(f"[red]JMESPath error:[/red] {e}")
+            _console.print(f"[red]JMESPath error:[/red] {e}\n[red]Query:[/red] {jq}")
 
     # JSON
     if output == "json":
