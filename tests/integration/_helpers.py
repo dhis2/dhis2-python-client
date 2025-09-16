@@ -3,6 +3,21 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Mapping, Tuple
 
+def extract_status(payload: dict) -> str:
+    if payload.get("response", {}).get("status"):
+        return payload["response"]["status"]
+    if payload.get("status"):
+        return payload["status"]
+    if payload.get("httpStatus"):
+        return payload["httpStatus"]
+    return "UNKNOWN"
+
+def extract_conflicts(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if payload.get("response", {}).get("conflicts"):
+        return payload["response"]["conflicts"]
+    if payload.get("conflicts"):
+        return payload["conflicts"]
+    return []
 
 def dump_json(obj: Any) -> str:
     """
@@ -40,9 +55,7 @@ def summarize_dvs_import(payload: Mapping[str, Any] | None) -> Tuple[str, Dict[s
         )
 
     # status
-    status = (
-        (payload.get("response") or {}).get("status") or payload.get("status") or payload.get("httpStatus") or "UNKNOWN"
-    )
+    status = extract_status(payload)
 
     # counts
     counts = (payload.get("response") or {}).get("importCount") or payload.get("stats") or {}
@@ -52,8 +65,11 @@ def summarize_dvs_import(payload: Mapping[str, Any] | None) -> Tuple[str, Dict[s
     ignored = int(counts.get("ignored", 0) or 0)
 
     # conflicts
-    conflicts: List[Dict[str, Any]] = (payload.get("response") or {}).get("conflicts") or payload.get("conflicts") or []
-    conflicts_txt = "; ".join(f"{c.get('object','?')}: {c.get('value') or c.get('message') or '?'}" for c in conflicts)
+    conflicts: List[Dict[str, Any]] = extract_conflicts(payload)
+    conflicts_txt = "; ".join(
+        f"{c.get('object', '?')}: {c.get('value') or c.get('message') or '?'}"
+        for c in conflicts
+    )
 
     # server message if present
     msg = payload.get("message") or (payload.get("response") or {}).get("description") or ""

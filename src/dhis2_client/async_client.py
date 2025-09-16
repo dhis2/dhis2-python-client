@@ -299,7 +299,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         out_m: List[DataSet] = []
         async for chunk in self.iter_data_sets(fields, page_size, as_dict=False):
             out_m.extend(chunk)
-        return out_m
+        return DataSets.model_validate({"dataSets": out_m}).dataSets
 
     async def post_data_value_set(
         self,
