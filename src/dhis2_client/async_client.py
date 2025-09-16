@@ -217,7 +217,7 @@ class DHIS2AsyncClient(_ParamsMixin):
 
     async def list_all_organisation_units(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False):
         if as_dict:
-            out: List[OrganisationUnit] = []
+            out: List[Dict[str, Any]] = []
             async for chunk in self.iter_organisation_units(fields, page_size):
                 out.extend(chunk)
             return out
