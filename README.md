@@ -1,245 +1,372 @@
-# DHIS2 Python Client 🐍✨
+# dhis2-python-client
 
-A modern Python client and CLI for [DHIS2](https://dhis2.org).  
-Supports both **sync** and **async** engines, with flexible return types (**dict/JSON or Pydantic models**) and a powerful **CLI** for administrators, developers, and data managers.
+> Async & Sync DHIS2 Web API client (Python 3.10+) with httpx, Pydantic v2, structured logging, and paging.  
+> Includes period validation/formatting, clean typed models, a full unit + integration test suite, and a powerful CLI (sync or async).
+
+![status](https://img.shields.io/badge/status-active-brightgreen)
+![python](https://img.shields.io/badge/python-3.10%2B-blue)
+![pydantic](https://img.shields.io/badge/pydantic-v2-ff69b4)
+![httpx](https://img.shields.io/badge/httpx-async%20%26%20sync-6f42c1)
+![license](https://img.shields.io/badge/license-BSD--3--Clause-lightgrey)
 
 ---
 
 ## 📑 Table of Contents
 
+- [Overview](#-overview)
+- [Features](#-features)
+- [Requirements](#-requirements)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
   - [Logging](#logging)
-  - [Return Types](#return-types-dictjson-vs-pydantic)
-- [CLI Overview](#-cli-overview)
+  - [Return Types](#return-types)
+- [Usage](#-usage)
+  - [Create a Client (Sync)](#create-a-client-sync)
+  - [Create a Client (Async)](#create-a-client-async)
+  - [Generic Endpoints](#generic-endpoints)
+  - [Typed Helpers](#typed-helpers)
+  - [Paging](#paging)
+  - [Periods](#periods)
+- [CLI](#-cli)
   - [CLI Cheat Sheet](#cli-cheat-sheet)
-  - [CLI Examples](#cli-examples)
-- [Python Usage](#-python-usage)
-  - [Sync Client](#sync-client)
-  - [Async Client](#async-client)
+  - [Examples](#examples)
+- [API Reference](#-api-reference)
+- [Logging](#-logging)
+- [Errors](#-errors)
+- [FAQ](#-faq)
 - [Contributing](#-contributing)
+- [License](#-license)
+
+---
+
+## ✨ Overview
+
+A small, focused client for the DHIS2 Web API supporting **both Sync and Async** programming styles:
+
+- Generic HTTP helpers so you can hit any path.
+- Typed models for common resources **or** raw dict/JSON (your choice).
+- Paging and period helpers out-of-the-box.
+- CLI for quick one-liners and automation (**sync or async engine**).
+
+---
+
+## 🚀 Features
+
+- ⚡ **Async & Sync** HTTP via `httpx.AsyncClient` and `httpx.Client`
+- ✅ **Pydantic v2** models (strict request validation, safe response parsing)
+- 🧩 **Return type control**: default **dict/JSON**; opt-in Pydantic (per-call or global)
+- 🧭 Paging helpers using `pager.page` / `pageCount`
+- 📅 Period validation & formatting (subset of DHIS2 types)
+- 🛠 **CLI** built with `typer` + `rich` (supports `--engine sync|async`, default = sync)
+- 🧪 Tests: unit + integration (with `.env` and optional pinned UIDs)
+- 🧰 Structured logging with `structlog` (JSON output)
+
+---
+
+## 📋 Requirements
+
+- Python 3.10+
+- A running DHIS2 instance for integration tests
 
 ---
 
 ## 📦 Installation
 
-Install from PyPI:
+### Library only
 
 ```bash
-pip install dhis2-client
+pip install dhis2-python-client
 ```
 
-Or from source:
+### Library + CLI
 
 ```bash
-git clone https://github.com/dhis2/dhis2-python-client.git
-cd dhis2-python-client
-pip install -e .
+pip install "dhis2-python-client[cli]"
+```
+
+This installs the `dhis2-client` executable along with `typer`, `rich`, and `pyyaml`.
+
+### Development install
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -U pip
+pip install -r requirements-dev.txt
+pip install -e ".[cli]"
 ```
 
 ---
 
 ## ⚙️ Configuration
 
+Put credentials and options in a `.env` file in the root folder:
+
+```
+DHIS2_BASE_URL=http://localhost:8080
+DHIS2_USERNAME=admin
+DHIS2_PASSWORD=district
+# or DHIS2_TOKEN=your_api_token
+
+DHIS2_TIMEOUT=30
+VERIFY_SSL=true
+LOG_LEVEL=WARNING
+# Return type default (False -> dict/JSON, True -> Pydantic)
+RETURN_MODELS=false
+```
+
+CLI and library also support layered config: system TOML, user TOML, `.env`, environment variables, then CLI flags.
+
 ### Logging
 
-The client uses Python’s built-in logging.  
-Default level = **WARNING** ⚠️. You can override via `Settings`:
+Default level = **WARNING** ⚠️. You can configure via `Settings` or env.
 
 ```python
-from dhis2_client import Settings, DHIS2Client
+from dhis2_client import Settings
 
 settings = Settings(
     base_url="http://localhost:8080",
     username="admin",
     password="district",
-    log_level="DEBUG",  # INFO | WARNING | ERROR | CRITICAL
+    log_level="INFO",  # DEBUG | INFO | WARNING | ERROR | CRITICAL
 )
 ```
 
----
+### Return Types
 
-### Return Types (dict/JSON vs Pydantic)
-
-By default, **methods return plain `dict` objects (JSON)** ✅  
-
-This is controlled globally via the `Settings.return_models` flag:
+By default, methods return **plain `dict` (JSON)** ✅. This is controlled globally via the `Settings.return_models` flag:
 
 - `return_models=False` (default) → always return dict/JSON unless overridden.  
 - `return_models=True` → return Pydantic models by default.  
 
 You can also override **per-call** with the `as_dict` flag.
 
-Example:
-
 ```python
-from dhis2_client import Settings, DHIS2Client
-
-# Global default (dict/JSON)
-settings = Settings(base_url="http://localhost:8080", username="admin", password="district")
-client = DHIS2Client.from_settings(settings)
+# dict (default)
 info = client.get_system_info()
-print(info["version"])  # dict
+print(info["version"])
 
-# Global opt-in for models
-settings = Settings(base_url="http://localhost:8080", username="admin", password="district", return_models=True)
+# Pydantic model
+info_m = client.get_system_info(as_dict=False)
+print(info_m.version)
+
+# Global opt-in to models
+settings = Settings(..., return_models=True)
 client = DHIS2Client.from_settings(settings)
-info_m = client.get_system_info()
-print(info_m.version)  # Pydantic model
-
-# Per-call override
-info_dict = client.get_system_info(as_dict=True)     # dict
-info_model = client.get_system_info(as_dict=False)   # Pydantic
+info = client.get_system_info()  # model
 ```
 
 ---
 
-## 🖥 CLI Overview
+## 🐍 Usage
 
-Run:
-
-```bash
-dhis2-client --help
-```
-
-Main groups:
-
-- 🔧 **system** → system info, ping  
-- 🌐 **http** → raw GET/POST/PUT/DELETE  
-- 📊 **metadata** → generic CRUD for all metadata collections  
-- 👤 **users** → manage users  
-- 📈 **data-values** → single data value get/upsert/delete  
-- 📦 **data-value-sets** → import/export entire value sets  
-- 📤 **bulk** → generic bulk POST/PUT/PATCH (events, TEIs, etc.)
-
-### CLI Cheat Sheet
-
-| Command group     | Purpose                                      |
-|-------------------|----------------------------------------------|
-| 🔧 `system`       | System info, ping                            |
-| 🌐 `http`         | Raw GET/POST/PUT/DELETE to any path          |
-| 📊 `metadata`     | Generic CRUD for all metadata collections    |
-| 👤 `users`        | Manage users (list/show/create/update/delete)|
-| 📈 `data-values`  | Get/upsert/delete single data values         |
-| 📦 `data-value-sets` | Import/export full sets of data values     |
-| 📤 `bulk`         | Bulk JSON upload (events, TEIs, enrollments) |
-
-All commands support:
-
-- `--engine sync|async` (default = sync)  
-- `--output table|json|yaml`  
-- `--jq` for JQ filtering  
-- `--password-stdin` for CI use  
-- `--verbose` for detailed logging  
-
----
-
-## 🚀 CLI Examples
-
-### System info
-```bash
-dhis2-client system info   --base-url http://localhost:8080   --username admin --password district   --engine sync --output json
-```
-
-### Metadata
-Search data elements:
-```bash
-dhis2-client metadata search dataElements   --base-url http://localhost:8080 --username admin --password district   --filter name:ilike:malaria --fields id --fields name --output table
-```
-
-Create from JSON:
-```bash
-dhis2-client metadata create organisationUnits   --base-url http://localhost:8080 --username admin --password district   --json @orgunit.json
-```
-
-### Users
-```bash
-dhis2-client users list   --base-url http://localhost:8080 --username admin --password district   --fields id --fields username --output table
-```
-
-### Data Values
-```bash
-dhis2-client data-values upsert   --de DeUid --pe 202401 --ou OuUid --value 42   --base-url http://localhost:8080 --username admin --password district
-```
-
-### Data Value Sets
-Export:
-```bash
-dhis2-client data-value-sets export   --data-set dsUid --period 202401 --org-unit ouUid   --base-url http://localhost:8080 --username admin --password district   --dest values.json
-```
-
-Import:
-```bash
-dhis2-client data-value-sets import   --source @values.json   --base-url http://localhost:8080 --username admin --password district   --dry-run
-```
-
----
-
-## 🐍 Python Usage
-
-### Sync Client
+### Create a Client (Sync)
 
 ```python
 from dhis2_client import DHIS2Client, Settings
 
-settings = Settings(
-    base_url="http://localhost:8080",
-    username="admin",
-    password="district",
-    log_level="INFO"
-)
-
+settings = Settings(base_url="http://localhost:8080", username="admin", password="district")
 with DHIS2Client.from_settings(settings) as client:
-    # dict (default)
-    info = client.get_system_info()
+    info = client.get_system_info()  # dict by default
     print(info["version"])
-
-    # Pydantic model
-    info_m = client.get_system_info(as_dict=False)
-    print(info_m.version)
-
-    # Get organisation units
-    ous = client.get_organisation_units(fields=["id","name"], as_dict=True)
-    print("ou count:", len(ous))
 ```
 
----
-
-### Async Client
+### Create a Client (Async)
 
 ```python
 import asyncio
 from dhis2_client import DHIS2AsyncClient, Settings
 
-settings = Settings(
-    base_url="http://localhost:8080",
-    username="admin",
-    password="district"
-)
-
 async def main():
+    settings = Settings(base_url="http://localhost:8080", username="admin", password="district")
     async with DHIS2AsyncClient.from_settings(settings) as client:
-        # dict (default)
-        info = await client.get_system_info()
+        info = await client.get_system_info()  # dict by default
         print(info["version"])
-
-        # Pydantic model
-        info_m = await client.get_system_info(as_dict=False)
-        print(info_m.version)
-
-        # Iterate org units
-        async for page in client.iter_organisation_units(fields=["id","name"], as_dict=True):
-            print("Page:", page)
-
 asyncio.run(main())
 ```
+
+### Generic Endpoints
+
+```python
+# sync
+client.get("/api/organisationUnits", params={"pageSize": 5})
+client.post_json("/api/dataElements", {"name": "My DE", "shortName": "MDE", "domainType": "AGGREGATE", "valueType": "INTEGER"})
+
+# async
+await client.get("/api/organisationUnits", params={"pageSize": 5})
+await client.post_json("/api/dataElements", {"name": "My DE", "shortName": "MDE", "domainType": "AGGREGATE", "valueType": "INTEGER"})
+```
+
+### Typed Helpers
+
+```python
+from datetime import date
+from dhis2_client.models import DataValueSet, DataValue, format_period
+
+period = format_period("Monthly", date.today())
+payload = DataValueSet(
+    dataSet="lyLU2wR22tC",
+    period=period,
+    orgUnit="ImspTQPwCqd",
+    dataValues=[DataValue(dataElement="fbfJHSPpUQD", orgUnit="ImspTQPwCqd", period=period, value="1")]
+)
+
+# sync
+client.post_data_value_set(payload, import_strategy="CREATE")
+
+# async
+await client.post_data_value_set(payload, import_strategy="CREATE")
+```
+
+### Paging
+
+```python
+# async iteration
+async for page in client.iter_data_elements(fields=["id","name"], page_size=500):
+    for de in page:
+        # 'de' is dict by default (or model if return_models=True / as_dict=False)
+        print(de.get("id"), de.get("name"))
+```
+
+### Periods
+
+```python
+from datetime import date
+from dhis2_client.models import validate_period, format_period
+
+validate_period("Monthly", "202501")          # ok
+format_period("Weekly", date(2025, 1, 15))    # "2025W03"
+```
+
+---
+
+## 🖥 CLI
+
+Install with CLI extras:
+
+```bash
+pip install "dhis2-python-client[cli]"
+```
+
+The CLI supports **sync or async** via `--engine` (default = sync) and can output **table | json | yaml**.
+
+### CLI Cheat Sheet
+
+| Group              | Purpose                                       |
+|--------------------|-----------------------------------------------|
+| 🔧 `system`        | System info, ping                             |
+| 🌐 `http`          | Raw GET/POST/PUT/DELETE to any path           |
+| 📊 `metadata`      | Generic CRUD for all metadata collections     |
+| 👤 `users`         | Manage users                                  |
+| 📈 `data-values`   | Get/upsert/delete a single data value         |
+| 📦 `data-value-sets` | Import/export full sets of data values       |
+| 📤 `bulk`          | Bulk JSON upload (events, TEIs, enrollments)  |
+
+### Examples
+
+```bash
+# System info (sync, JSON)
+dhis2-client system info   --base-url http://localhost:8080 --username admin --password district   --output json
+
+# System info (async, JSON)
+dhis2-client system info   --base-url http://localhost:8080 --username admin --password district   --engine async --output json
+
+# Search metadata (async)
+dhis2-client metadata search dataElements   --base-url http://localhost:8080 --username admin --password district   --engine async --filter name:ilike:malaria --fields id --fields name --output table
+
+# Create metadata from file
+dhis2-client metadata create organisationUnits   --base-url http://localhost:8080 --username admin --password district   --json @orgunit.json
+
+# Users: list
+dhis2-client users list   --base-url http://localhost:8080 --username admin --password district   --fields id --fields username --output table
+
+# Data value upsert
+dhis2-client data-values upsert   --de DeUid --pe 202401 --ou OuUid --value 42   --base-url http://localhost:8080 --username admin --password district
+```
+
+---
+
+## 📚 API Reference
+
+### System
+- `get_system_info()` → `dict` (default) or Pydantic with `as_dict=False`
+
+### Organisation Units
+- `get_organisation_units(fields, page_size=100, paging=True, as_dict=False)`
+- `iter_organisation_units(fields, page_size=100, as_dict=False)`
+- `list_all_organisation_units(fields, page_size=100, as_dict=False)`
+
+### Data Elements
+- `get_data_elements(fields, page_size=100, paging=True, as_dict=False)`
+- `iter_data_elements(fields, page_size=100, as_dict=False)`
+- `list_all_data_elements(fields, page_size=100, as_dict=False)`
+
+### Data Sets
+- `get_data_sets(fields, page_size=100, paging=True, as_dict=False)`
+- `iter_data_sets(fields, page_size=100, as_dict=False)`
+- `list_all_data_sets(fields, page_size=100, as_dict=False)`
+
+### Data Value Sets
+- `post_data_value_set(dvs: DataValueSet | dict, import_strategy="CREATE"|"DELETE", dry_run=False)`
+
+### Generic Endpoints
+- `get(path, params=None)`
+- `post_json(path, payload)`
+- `put_json(path, payload)`
+- `delete(path)`
+
+### Period Utilities
+- `validate_period(period_type, period_str)`
+- `format_period(period_type, date_obj)`
+
+---
+
+## 📜 Logging
+
+By default, the library logs **WARNING** and above. Increase verbosity with either:
+
+**Environment variable**
+
+```bash
+export DHIS2_LOG_LEVEL=INFO
+```
+
+**Programmatically**
+
+```python
+from dhis2_client.logging_conf import configure_logging
+configure_logging(level="INFO")
+```
+
+**Via Settings**
+
+```python
+from dhis2_client import Settings
+settings = Settings(..., log_level="INFO")
+```
+
+---
+
+## ❗ Errors
+
+HTTP errors raise typed exceptions, e.g. `NotFound`, `Conflict`.  
+Payload (if parsed) is attached to `details` for debugging.
+
+---
+
+## ❓ FAQ
+
+- Why generic endpoints? Flexibility; typed wrappers where helpful.
+- Why a CLI? For quick inspection, automation, and integration with shell pipelines.
+- Why dict by default? Interop + performance; opt into models when you need type safety.
 
 ---
 
 ## 🤝 Contributing
 
-- Run tests with `pytest`  
-- Lint with `ruff` and `black`  
-- Please open issues/PRs for bugs, new CLI commands, or enhancements.  
+See `DEVELOPER_GUIDE.md` for the onboarding guide, testing strategy, and contribution guidelines.
 
 ---
+
+## 📄 License
+
+BSD-3-Clause
