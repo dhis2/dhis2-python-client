@@ -1,1 +1,1 @@
-from .app import app  # so "dhis2_client.cli:app" also works
+from .app import app as app

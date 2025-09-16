@@ -65,9 +65,11 @@ class DHIS2AsyncClient(_ParamsMixin):
         # best-effort logging setup (don’t block)
         try:
             from .logging_conf import configure_logging
+
             configure_logging(getattr(settings, "log_level", None))
         except Exception:  # noqa: BLE001
             import logging as _logging
+
             _logging.getLogger(__name__).debug("logging_setup_skipped", exc_info=True)
 
         headers = _get_auth_header_from_settings(settings)
@@ -211,13 +213,7 @@ class DHIS2AsyncClient(_ParamsMixin):
                 yield page
             yield OrganisationUnits.model_validate({"organisationUnits": page}).organisationUnits
 
-    async def list_all_organisation_units(
-        self,
-        fields: Iterable[str],
-        page_size: int = 100,
-        *,
-        as_dict: bool = False
-    ):
+    async def list_all_organisation_units(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False):
         if as_dict:
             out: List[OrganisationUnit] = []
             async for chunk in self.iter_organisation_units(fields, page_size):
@@ -242,11 +238,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         return DataElements.model_validate(data).dataElements
 
     async def iter_data_elements(
-            self,
-            fields: Iterable[str],
-            page_size: int = 100,
-            *,
-            as_dict: bool = False
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False
     ) -> AsyncIterator[List[Any]]:
         async for page in self._paginate("dataElements", "dataElements", fields, page_size):
             if as_dict:
@@ -255,11 +247,11 @@ class DHIS2AsyncClient(_ParamsMixin):
                 yield DataElements.model_validate({"dataElements": page}).dataElements
 
     async def list_all_data_elements(
-            self,
-            fields: Iterable[str],
-            page_size: int = 100,
-            *,
-            as_dict: bool = False,
+        self,
+        fields: Iterable[str],
+        page_size: int = 100,
+        *,
+        as_dict: bool = False,
     ):
         if as_dict:
             out: List[Dict[str, Any]] = []
@@ -272,11 +264,12 @@ class DHIS2AsyncClient(_ParamsMixin):
         return DataElements.model_validate({"dataElements": out_m}).dataElements
 
     async def get_data_sets(
-            self,
-            fields: Iterable[str],
-            page_size: int = 100,
-            paging: bool = True,
-            *, as_dict: bool = False,
+        self,
+        fields: Iterable[str],
+        page_size: int = 100,
+        paging: bool = True,
+        *,
+        as_dict: bool = False,
     ):
         data = await self._list_common("dataSets", fields, page_size, paging=paging)
         if as_dict:
@@ -284,11 +277,7 @@ class DHIS2AsyncClient(_ParamsMixin):
         return DataSets.model_validate(data).dataSets
 
     async def iter_data_sets(
-            self,
-            fields: Iterable[str],
-            page_size: int = 100,
-            *,
-            as_dict: bool = False
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False
     ) -> AsyncIterator[List[Any]]:
         async for page in self._paginate("dataSets", "dataSets", fields, page_size):
             if as_dict:
@@ -296,16 +285,15 @@ class DHIS2AsyncClient(_ParamsMixin):
             else:
                 yield DataSets.model_validate({"dataSets": page}).dataSets
 
-    async def list_all_data_sets(
-            self,
-            fields: Iterable[str],
-            page_size: int = 100,
-            *,
-            as_dict: bool = False
-    ):
+    async def list_all_data_sets(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False):
         if as_dict:
             out: List[Dict[str, Any]] = []
-            async for chunk in self._paginate("dataSets", "dataSets", fields, page_size,):
+            async for chunk in self._paginate(
+                "dataSets",
+                "dataSets",
+                fields,
+                page_size,
+            ):
                 out.extend(chunk)
             return out
         out_m: List[DataSet] = []

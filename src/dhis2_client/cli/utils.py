@@ -9,6 +9,7 @@ try:
 except Exception:  # pragma: no cover
     PydanticBaseModel = object  # fallback, just in case
 
+
 def run(coro):
     return asyncio.run(coro)
 
@@ -37,6 +38,7 @@ async def iter_pages(
             break
         page += 1
 
+
 def make_json_safe(obj: Any) -> Any:
     """
     Coerce non-JSON-serializable values (e.g., pydantic Url) to strings.
@@ -53,6 +55,7 @@ def make_json_safe(obj: Any) -> Any:
         return t(make_json_safe(v) for v in obj)
     # everything else -> string
     return str(obj)
+
 
 def to_plain(obj: Any) -> Any:
     """
@@ -72,6 +75,7 @@ def to_plain(obj: Any) -> Any:
         t = type(obj)
         return t(to_plain(v) for v in obj)
     return obj
+
 
 def build_settings_with_overrides(
     *,

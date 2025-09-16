@@ -7,10 +7,12 @@ import typer
 
 periods_app = typer.Typer(help="Period utilities")
 
+
 @periods_app.command("validate")
 def validate_cmd(period_type: str, period: str):
     # validate_period(period_type, period)  # raise if invalid
     typer.secho("OK", fg=typer.colors.GREEN)
+
 
 @periods_app.command("format")
 def format_cmd(period_type: str, year: int, month: int = 1, day: int = 1):

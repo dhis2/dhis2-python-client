@@ -65,9 +65,11 @@ class DHIS2Client(_ParamsMixin):
         # best-effort logging setup (don’t block)
         try:
             from .logging_conf import configure_logging
+
             configure_logging(getattr(settings, "log_level", None))
         except Exception:  # noqa: BLE001
             import logging as _logging
+
             _logging.getLogger(__name__).debug("logging_setup_skipped", exc_info=True)
 
         headers = _get_auth_header_from_settings(settings)
@@ -159,9 +161,7 @@ class DHIS2Client(_ParamsMixin):
         pages: List[List[Dict[str, Any]]] = []
         current_page = 1
         while True:
-            data = self._list_common(
-                resource, fields, page_size, True, {**(extra_params or {}), "page": current_page}
-            )
+            data = self._list_common(resource, fields, page_size, True, {**(extra_params or {}), "page": current_page})
             items = data.get(collection_key, []) or []
             pages.append(items)
             pager = data.get("pager") or {}
@@ -198,7 +198,7 @@ class DHIS2Client(_ParamsMixin):
         if as_dict:
             return data
         return SystemInfo.model_validate(data)
-    
+
     def get_organisation_units(
         self,
         fields: Iterable[str],
@@ -212,31 +212,41 @@ class DHIS2Client(_ParamsMixin):
             return data.get("organisationUnits", [])
         return OrganisationUnits.model_validate(data).organisationUnits
 
-    def list_all_organisation_units(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False) -> List[OrganisationUnit]:
+    def list_all_organisation_units(
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False
+    ) -> List[OrganisationUnit]:
         raw = self._list_all("organisationUnits", "organisationUnits", fields, page_size)
         if as_dict:
             return raw
         return OrganisationUnits.model_validate({"organisationUnits": raw}).organisationUnits
 
-    def get_data_elements(self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = False) -> List[DataElement]:
+    def get_data_elements(
+        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = False
+    ) -> List[DataElement]:
         data = self._list_common("dataElements", fields, page_size, paging=paging)
         if as_dict:
             return data.get("dataElements", [])
         return DataElements.model_validate(data).dataElements
 
-    def list_all_data_elements(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False) -> List[DataElement]:
+    def list_all_data_elements(
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False
+    ) -> List[DataElement]:
         raw = self._list_all("dataElements", "dataElements", fields, page_size)
         if as_dict:
             return raw
         return DataElements.model_validate({"dataElements": raw}).dataElements
 
-    def get_data_sets(self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = False) -> List[DataSet]:
+    def get_data_sets(
+        self, fields: Iterable[str], page_size: int = 100, paging: bool = True, *, as_dict: bool = False
+    ) -> List[DataSet]:
         data = self._list_common("dataSets", fields, page_size, paging=paging)
         if as_dict:
             return data.get("dataSets", [])
         return DataSets.model_validate(data).dataSets
 
-    def list_all_data_sets(self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False) -> List[DataSet]:
+    def list_all_data_sets(
+        self, fields: Iterable[str], page_size: int = 100, *, as_dict: bool = False
+    ) -> List[DataSet]:
         raw = self._list_all("dataSets", "dataSets", fields, page_size)
         if as_dict:
             return raw

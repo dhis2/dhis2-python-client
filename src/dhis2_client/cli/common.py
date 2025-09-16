@@ -29,8 +29,8 @@ class CLISettings:
     timeout: float = 30.0
     verify_ssl: bool = True
     log_level: str = "WARNING"
-    engine: str = DEFAULT_ENGINE                 # "sync" | "async"
-    output: str = "table"                        # "table" | "json" | "yaml" | "ndjson"
+    engine: str = DEFAULT_ENGINE  # "sync" | "async"
+    output: str = "table"  # "table" | "json" | "yaml" | "ndjson"
     fields: list[str] = dataclasses.field(default_factory=list)
     jq: Optional[str] = None
     page_size: int = 100
@@ -120,6 +120,7 @@ def make_settings(cfg: CLISettings) -> Settings:
 
 def run_async(coro):
     import asyncio
+
     try:
         return asyncio.run(coro)
     except RuntimeError:
@@ -154,6 +155,7 @@ def print_http_error(e: Exception, *, verbose: bool = False) -> None:
         if verbose:
             # import here to avoid cycles
             from .output import _to_plain
+
             _console.rule("Full error details")
             try:
                 _console.print_json(data=_to_plain(details))

@@ -28,20 +28,20 @@ def summarize_dvs_import(payload: Mapping[str, Any] | None) -> Tuple[str, Dict[s
     """
 
     if not payload:
-        return ("status=UNKNOWN created=0 updated=0 deleted=0 ignored=0", {
-            "status": "UNKNOWN",
-            "created": 0,
-            "updated": 0,
-            "deleted": 0,
-            "ignored": 0,
-        })
+        return (
+            "status=UNKNOWN created=0 updated=0 deleted=0 ignored=0",
+            {
+                "status": "UNKNOWN",
+                "created": 0,
+                "updated": 0,
+                "deleted": 0,
+                "ignored": 0,
+            },
+        )
 
     # status
     status = (
-        (payload.get("response") or {}).get("status")
-        or payload.get("status")
-        or payload.get("httpStatus")
-        or "UNKNOWN"
+        (payload.get("response") or {}).get("status") or payload.get("status") or payload.get("httpStatus") or "UNKNOWN"
     )
 
     # counts
@@ -52,14 +52,8 @@ def summarize_dvs_import(payload: Mapping[str, Any] | None) -> Tuple[str, Dict[s
     ignored = int(counts.get("ignored", 0) or 0)
 
     # conflicts
-    conflicts: List[Dict[str, Any]] = (
-        (payload.get("response") or {}).get("conflicts")
-        or payload.get("conflicts")
-        or []
-    )
-    conflicts_txt = "; ".join(
-        f"{c.get('object','?')}: {c.get('value') or c.get('message') or '?'}" for c in conflicts
-    )
+    conflicts: List[Dict[str, Any]] = (payload.get("response") or {}).get("conflicts") or payload.get("conflicts") or []
+    conflicts_txt = "; ".join(f"{c.get('object','?')}: {c.get('value') or c.get('message') or '?'}" for c in conflicts)
 
     # server message if present
     msg = payload.get("message") or (payload.get("response") or {}).get("description") or ""

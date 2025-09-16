@@ -18,8 +18,10 @@ def test_system_info_smoke(monkeypatch):
     class FakeClient:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, *exc):
             return False
+
         async def get_system_info(self):
             return {"version": "2.41.0", "systemName": "Demo"}
 
@@ -41,8 +43,10 @@ def test_get_basic(monkeypatch):
     class FakeClient:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, *exc):
             return False
+
         async def get(self, path, params=None):
             assert path.startswith("/api/") or path.startswith("api/")
             return {"pager": {"page": 1, "pageSize": 1, "total": 1}, "dataElements": [{"id": "A", "name": "Alpha"}]}

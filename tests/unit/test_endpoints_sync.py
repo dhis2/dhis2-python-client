@@ -28,23 +28,34 @@ def test_paging_data_elements_two_pages_sync():
     with DHIS2Client.from_settings(settings) as client:
         with respx.mock(base_url="http://test") as router:
             route = router.get("/api/dataElements")
-            route.mock(side_effect=[
-                # First call -> get_data_elements(paging=True)
-                httpx.Response(200, json={
-                    "dataElements": [{"id": "de1", "name": "One"}],
-                    "pager": {"page": 1, "pageCount": 2},
-                }),
-                # Second call -> list_all first page
-                httpx.Response(200, json={
-                    "dataElements": [{"id": "de1", "name": "One"}],
-                    "pager": {"page": 1, "pageCount": 2},
-                }),
-                # Third call -> list_all second page
-                httpx.Response(200, json={
-                    "dataElements": [{"id": "de2", "name": "Two"}],
-                    "pager": {"page": 2, "pageCount": 2},
-                }),
-            ])
+            route.mock(
+                side_effect=[
+                    # First call -> get_data_elements(paging=True)
+                    httpx.Response(
+                        200,
+                        json={
+                            "dataElements": [{"id": "de1", "name": "One"}],
+                            "pager": {"page": 1, "pageCount": 2},
+                        },
+                    ),
+                    # Second call -> list_all first page
+                    httpx.Response(
+                        200,
+                        json={
+                            "dataElements": [{"id": "de1", "name": "One"}],
+                            "pager": {"page": 1, "pageCount": 2},
+                        },
+                    ),
+                    # Third call -> list_all second page
+                    httpx.Response(
+                        200,
+                        json={
+                            "dataElements": [{"id": "de2", "name": "Two"}],
+                            "pager": {"page": 2, "pageCount": 2},
+                        },
+                    ),
+                ]
+            )
             # first-page call
             items = client.get_data_elements(fields=["id", "name"], page_size=1, paging=True)
             assert len(items) == 1 and items[0].id == "de1"
