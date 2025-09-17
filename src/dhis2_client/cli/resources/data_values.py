@@ -1,39 +1,49 @@
 from __future__ import annotations
 
 import sys
-from typing import Annotated, Any, Dict, Optional
-from urllib.parse import urlencode
+from typing import Annotated, Any, Dict, Optional, TYPE_CHECKING, List
 
 import typer
-from dhis2_client import DHIS2AsyncClient, DHIS2Client
+from click import Choice  # validate enum-like options
 
 from ..common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
 from ..output import render_output
 
+if TYPE_CHECKING:
+    from dhis2_client import DHIS2Client, DHIS2AsyncClient
+
 data_values_app = typer.Typer(help="Single data value helpers")
+
+Option = typer.Option
+
 
 # NOTE: For read/delete we use /api/dataValues; for upsert we use /api/dataValueSets with a single item.
 
-
 @data_values_app.command("get")
 def get_value(
-    de: Annotated[str, typer.Option(..., "--de", help="Data Element ID")],
-    pe: Annotated[str, typer.Option(..., "--pe", help="Period, e.g. 202401")],
-    ou: Annotated[str, typer.Option(..., "--ou", help="Org Unit ID")],
-    co: Annotated[Optional[str], typer.Option(None, "--co", help="CategoryOptionCombo (C.O.C)")],
-    aoc: Annotated[Optional[str], typer.Option(None, "--aoc", help="AttributeOptionCombo (A.O.C)")],
-    cc: Annotated[Optional[str], typer.Option(None, "--cc", help="Category combo ID (for classic form)")],
-    cp: Annotated[Optional[str], typer.Option(None, "--cp", help="Category options pipe list (for classic form)")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    de: Annotated[str, Option("--de", help="Data Element ID")],
+    pe: Annotated[str, Option("--pe", help="Period, e.g. 202401")],
+    ou: Annotated[str, Option("--ou", help="Org Unit ID")],
+    co: Annotated[Optional[str], Option("--co", help="CategoryOptionCombo (C.O.C)")] = None,
+    aoc: Annotated[Optional[str], Option("--aoc", help="AttributeOptionCombo (A.O.C)")] = None,
+    cc: Annotated[Optional[str], Option("--cc", help="Category combo ID (classic form)")] = None,
+    cp: Annotated[Optional[str], Option("--cp", help="Category options pipe list (classic form)")] = None,
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option("--engine", click_type=Choice(["sync", "async"], case_sensitive=False), help="sync|async (default: sync)")
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str,
+        Option("--output", "-o", click_type=Choice(["table", "json", "yaml"], case_sensitive=False))
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     pw = password
     if password_stdin and not token:
@@ -49,8 +59,8 @@ def get_value(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -76,13 +86,14 @@ def get_value(
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
                     return await client.get(path, params=params)
-
             data = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 data = client.get(path, params=params)
     except Exception as e:
@@ -94,23 +105,29 @@ def get_value(
 
 @data_values_app.command("delete")
 def delete_value(
-    de: Annotated[str, typer.Option(..., "--de")],
-    pe: Annotated[str, typer.Option(..., "--pe")],
-    ou: Annotated[str, typer.Option(..., "--ou")],
-    co: Annotated[Optional[str], typer.Option(None, "--co")],
-    aoc: Annotated[Optional[str], typer.Option(None, "--aoc")],
-    cc: Annotated[Optional[str], typer.Option(None, "--cc")],
-    cp: Annotated[Optional[str], typer.Option(None, "--cp")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    de: Annotated[str, Option("--de")],
+    pe: Annotated[str, Option("--pe")],
+    ou: Annotated[str, Option("--ou")],
+    co: Annotated[Optional[str], Option("--co")] = None,
+    aoc: Annotated[Optional[str], Option("--aoc")] = None,
+    cc: Annotated[Optional[str], Option("--cc")] = None,
+    cp: Annotated[Optional[str], Option("--cp")] = None,
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option("--engine", click_type=Choice(["sync", "async"], case_sensitive=False), help="sync|async (default: sync)")
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str,
+        Option("--output", "-o", click_type=Choice(["table", "json", "yaml"], case_sensitive=False))
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     pw = password
     if password_stdin and not token:
@@ -126,8 +143,8 @@ def delete_value(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -150,19 +167,20 @@ def delete_value(
             params["cp"] = cp
 
     path = "/api/dataValues"
-    qs = urlencode(params)
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
-                    return await client.delete(path + "?" + qs)
-
+                    # use params= for safe URL encoding
+                    return await client.delete(path, params=params)
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
-                res = client.delete(path + "?" + qs)
+                res = client.delete(path, params=params)
     except Exception as e:
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
@@ -172,24 +190,30 @@ def delete_value(
 
 @data_values_app.command("upsert")
 def upsert_value(
-    de: Annotated[str, typer.Option(..., "--de")],
-    pe: Annotated[str, typer.Option(..., "--pe")],
-    ou: Annotated[str, typer.Option(..., "--ou")],
-    value: Annotated[str, typer.Option(..., "--value")],
-    co: Annotated[Optional[str], typer.Option(None, "--co")],
-    aoc: Annotated[Optional[str], typer.Option(None, "--aoc")],
-    comment: Annotated[Optional[str], typer.Option(None, "--comment")],
-    follow_up: Annotated[bool, typer.Option(False, "--follow-up/--no-follow-up")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    de: Annotated[str, Option("--de")],
+    pe: Annotated[str, Option("--pe")],
+    ou: Annotated[str, Option("--ou")],
+    value: Annotated[str, Option("--value")],
+    co: Annotated[Optional[str], Option("--co")] = None,
+    aoc: Annotated[Optional[str], Option("--aoc")] = None,
+    comment: Annotated[Optional[str], Option("--comment")] = None,
+    follow_up: Annotated[bool, Option("--follow-up/--no-follow-up")] = False,
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option("--engine", click_type=Choice(["sync", "async"], case_sensitive=False), help="sync|async (default: sync)")
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str,
+        Option("--output", "-o", click_type=Choice(["table", "json", "yaml"], case_sensitive=False))
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     """
     Implements upsert via POST /api/dataValueSets with a single dataValues item.
@@ -209,8 +233,8 @@ def upsert_value(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -235,13 +259,14 @@ def upsert_value(
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
                     return await client.post_json("/api/dataValueSets", payload=payload)
-
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 res = client.post_json("/api/dataValueSets", payload=payload)
     except Exception as e:

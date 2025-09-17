@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import sys
-from typing import Annotated, Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional, TYPE_CHECKING, List  # Literal removed
 
 import typer
-from dhis2_client import DHIS2AsyncClient, DHIS2Client
+from click import Choice  # <-- for validated choices
 
 from ..common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
 from ..output import render_output
-from ..utils import parse_bool_opt, to_plain_json  # ← use your helpers
+from ..utils import parse_bool_opt, to_plain_json
+
+if TYPE_CHECKING:
+    from dhis2_client import DHIS2Client, DHIS2AsyncClient
 
 users_app = typer.Typer(help="Users")
 
@@ -17,36 +20,86 @@ ARRAY_KEY = "users"
 DEFAULT_FIELDS = ["id", "username", "displayName", "email"]
 
 
-def _normalize(res: Dict[str, Any]) -> list[dict]:
+def _normalize(res: Dict[str, Any]) -> List[dict]:
     return res.get(ARRAY_KEY, []) if isinstance(res, dict) else []
+
+
+async def _async_list_all_users(
+    client: "DHIS2AsyncClient",
+    page_size: Optional[int],
+    fields_csv: str,
+) -> List[dict]:
+    # always request paging for predictable structure
+    first = await client.get(API_PATH, params={"paging": True, "pageSize": page_size, "page": 1, "fields": fields_csv})
+    items: List[dict] = _normalize(first)
+    pager = int(first.get("pager", {}).get("pageCount", 1)) if isinstance(first, dict) else 1
+    for p in range(2, pager + 1):
+        res = await client.get(
+            API_PATH, params={"paging": True, "pageSize": page_size, "page": p, "fields": fields_csv}
+        )
+        items.extend(_normalize(res))
+    return items
+
+
+def _sync_list_all_users(
+    client: "DHIS2Client",
+    page_size: Optional[int],
+    fields_csv: str,
+) -> List[dict]:
+    first = client.get(API_PATH, params={"paging": True, "pageSize": page_size, "page": 1, "fields": fields_csv})
+    items: List[dict] = _normalize(first)
+    pager = int(first.get("pager", {}).get("pageCount", 1)) if isinstance(first, dict) else 1
+    for p in range(2, pager + 1):
+        res = client.get(
+            API_PATH, params={"paging": True, "pageSize": page_size, "page": p, "fields": fields_csv}
+        )
+        items.extend(_normalize(res))
+    return items
 
 
 @users_app.command("list")
 def list_users(
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    page_size: Annotated[Optional[int], typer.Option(None, "--page-size")],
-    all_pages: Annotated[bool, typer.Option(False, "--all", help="Fetch all pages")],
-    fields: Annotated[list[str], typer.Option(DEFAULT_FIELDS, "--fields")],
-    output: Annotated[Optional[str], typer.Option("table", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    base_url: Annotated[Optional[str], typer.Option("--base-url")] = None,
+    username: Annotated[Optional[str], typer.Option("--username")] = None,
+    password: Annotated[Optional[str], typer.Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], typer.Option("--token")] = None,
+    password_stdin: Annotated[bool, typer.Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        typer.Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    profile: Annotated[Optional[str], typer.Option("--profile")] = None,
+    page_size: Annotated[Optional[int], typer.Option("--page-size")] = None,
+    all_pages: Annotated[bool, typer.Option("--all", is_flag=True, help="Fetch all pages")] = False,
+    fields: Annotated[List[str], typer.Option("--fields")] = DEFAULT_FIELDS.copy(),
+    output: Annotated[
+        str,
+        typer.Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: table)",
+        ),
+    ] = "table",
+    jq: Annotated[Optional[str], typer.Option("--jq")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
     as_dict: Annotated[
         Optional[str],
-        typer.Option(None, "--as-dict", metavar="BOOL", help="true/false. Omit to use Settings.return_models default."),
+        typer.Option("--as-dict", metavar="BOOL", help="true/false. Omit to use Settings.return_models default.")
     ] = None,
 ) -> None:
+    # Password handling
     pw = password
     if password_stdin and not token:
         pw = sys.stdin.readline().rstrip("\n")
     if username and not pw and not token:
         pw = typer.prompt("Password", hide_input=True)
 
+    # Build CLI + Settings
     cfg: CLISettings = resolve_settings(
         base_url=base_url,
         username=username,
@@ -55,8 +108,8 @@ def list_users(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=fields,
         jq=jq,
         profile=profile,
@@ -64,32 +117,20 @@ def list_users(
         all_pages=all_pages,
         password_stdin=password_stdin,
         array_key=ARRAY_KEY,
-        as_dict=parse_bool_opt(as_dict),  # ← threaded for consistency/global default
+        as_dict=parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
     query_fields = ",".join(fields) if fields else ",".join(DEFAULT_FIELDS)
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
                     if cfg.all_pages:
-                        items: list[dict] = []
-                        first = await client.get(
-                            API_PATH,
-                            params={"paging": True, "pageSize": cfg.page_size, "page": 1, "fields": query_fields},
-                        )
-                        pager = int(first.get("pager", {}).get("pageCount", 1)) if isinstance(first, dict) else 1
-                        items.extend(_normalize(first))
-                        for p in range(2, pager + 1):
-                            res = await client.get(
-                                API_PATH,
-                                params={"paging": True, "pageSize": cfg.page_size, "page": p, "fields": query_fields},
-                            )
-                            # avoid key error if response is not dict
-                            items.extend(_normalize(res))
-                        return items
+                        return await _async_list_all_users(client, cfg.page_size, query_fields)
+                    # single page (for predictability, still request paging)
                     res = await client.get(
                         API_PATH, params={"paging": True, "pageSize": cfg.page_size, "page": 1, "fields": query_fields}
                     )
@@ -97,21 +138,10 @@ def list_users(
 
             data = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 if cfg.all_pages:
-                    items: list[dict] = []
-                    first = client.get(
-                        API_PATH, params={"paging": True, "pageSize": cfg.page_size, "page": 1, "fields": query_fields}
-                    )
-                    pager = int(first.get("pager", {}).get("pageCount", 1)) if isinstance(first, dict) else 1
-                    items.extend(_normalize(first))
-                    for p in range(2, pager + 1):
-                        res = client.get(
-                            API_PATH,
-                            params={"paging": True, "pageSize": cfg.page_size, "page": p, "fields": query_fields},
-                        )
-                        items.extend(_normalize(res))
-                    data = items
+                    data = _sync_list_all_users(client, cfg.page_size, query_fields)
                 else:
                     res = client.get(
                         API_PATH, params={"paging": True, "pageSize": cfg.page_size, "page": 1, "fields": query_fields}
@@ -126,20 +156,35 @@ def list_users(
 
 @users_app.command("show")
 def show_user(
-    id: str,
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    id: Annotated[str, typer.Argument(..., help="User UID")],
+    base_url: Annotated[Optional[str], typer.Option("--base-url")] = None,
+    username: Annotated[Optional[str], typer.Option("--username")] = None,
+    password: Annotated[Optional[str], typer.Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], typer.Option("--token")] = None,
+    password_stdin: Annotated[bool, typer.Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        typer.Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    profile: Annotated[Optional[str], typer.Option("--profile")] = None,
+    output: Annotated[
+        str,
+        typer.Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    jq: Annotated[Optional[str], typer.Option("--jq")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
     as_dict: Annotated[
         Optional[str],
-        typer.Option(None, "--as-dict", metavar="BOOL", help="true/false. Omit to use Settings.return_models default."),
+        typer.Option("--as-dict", metavar="BOOL", help="true/false. Omit to use Settings.return_models default.")
     ] = None,
 ) -> None:
     pw = password
@@ -156,8 +201,8 @@ def show_user(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -171,6 +216,7 @@ def show_user(
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
@@ -178,6 +224,7 @@ def show_user(
 
             data = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 data = client.get(f"{API_PATH}/{id}")
     except Exception as e:

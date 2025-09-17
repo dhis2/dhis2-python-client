@@ -1,85 +1,28 @@
 from __future__ import annotations
 
-import json
 import sys
-from pathlib import Path
-from typing import Annotated, Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional, TYPE_CHECKING, Iterable, List  # Literal removed
 
 import typer
-from pydantic import BaseModel
-
-from dhis2_client import DHIS2AsyncClient, DHIS2Client
+from click import Choice  # <-- robust value validation
 
 from .common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
 from .output import render_output
+from .utils import detect_array_key, load_json_arg, parse_bool_opt, parse_params, to_plain_json
+
+if TYPE_CHECKING:
+    from dhis2_client import DHIS2Client, DHIS2AsyncClient
 
 http_app = typer.Typer(help="Generic HTTP helpers")
+Option = typer.Option
+Argument = typer.Argument
 
 
-def _parse_params(items: list[str]) -> dict:
-    params: Dict[str, str] = {}
-    for p in items:
-        if "=" not in p:
-            raise typer.BadParameter(f"Invalid --param '{p}', expected key=value")
-        k, v = p.split("=", 1)
-        params[k] = v
-    return params
-
-
-def _load_json_arg(json_arg: Optional[str]) -> object | None:
-    if not json_arg:
-        return None
-    if json_arg.startswith("@"):
-        p = Path(json_arg[1:])
-        return json.loads(p.read_text(encoding="utf-8"))
-    return json.loads(json_arg)
-
-
-def _detect_array_key(obj: Dict[str, Any]) -> Optional[str]:
-    # Heuristic: first list-of-dicts key
-    for k, v in obj.items():
-        if isinstance(v, list) and (not v or isinstance(v[0], dict)):
-            return k
-    return None
-
-
-def _to_plain_json(value: Any) -> Any:
-    """Convert pydantic models/containers into plain JSON-compatible types."""
-    if isinstance(value, BaseModel):
-        return value.model_dump(by_alias=True, exclude_none=True)
-    if isinstance(value, dict):
-        return {k: _to_plain_json(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_to_plain_json(v) for v in value]
-    return value
-
-
-# --- boolean parsing for --as-dict ------------------------------------------
-
-_TRUE = {"1", "true", "t", "yes", "y", "on"}
-_FALSE = {"0", "false", "f", "no", "n", "off"}
-
-
-def _parse_bool_opt(value: Optional[str]) -> Optional[bool]:
-    """
-    Parse an optional string into a boolean.
-    None     -> None (defer to Settings)
-    'true'   -> True
-    'false'  -> False
-    Accepts common variants: 1/0, yes/no, on/off, t/f (case-insensitive).
-    """
-    if value is None:
-        return None
-    v = value.strip().lower()
-    if v in _TRUE:
-        return True
-    if v in _FALSE:
-        return False
-    raise typer.BadParameter("as-dict must be a boolean: true/false")
-
-
+# ---------------------------
+# helpers (unchanged logic)
+# ---------------------------
 async def _async_get_all(
-    client: DHIS2AsyncClient,
+    client: "DHIS2AsyncClient",
     path: str,
     params: Dict[str, Any],
     page_size: int,
@@ -88,7 +31,7 @@ async def _async_get_all(
     first = await client.get(path, params={**params, "paging": True, "pageSize": page_size, "page": 1})
     if not isinstance(first, dict) or "pager" not in first:
         return first
-    key = array_key or _detect_array_key(first) or "items"
+    key = array_key or detect_array_key(first) or "items"
     items = list(first.get(key, []))
     page_count = int(first.get("pager", {}).get("pageCount", 1))
     for page in range(2, page_count + 1):
@@ -98,7 +41,7 @@ async def _async_get_all(
 
 
 def _sync_get_all(
-    client: DHIS2Client,
+    client: "DHIS2Client",
     path: str,
     params: Dict[str, Any],
     page_size: int,
@@ -107,7 +50,7 @@ def _sync_get_all(
     first = client.get(path, params={**params, "paging": True, "pageSize": page_size, "page": 1})
     if not isinstance(first, dict) or "pager" not in first:
         return first
-    key = array_key or _detect_array_key(first) or "items"
+    key = array_key or detect_array_key(first) or "items"
     items = list(first.get(key, []))
     page_count = int(first.get("pager", {}).get("pageCount", 1))
     for page in range(2, page_count + 1):
@@ -116,39 +59,58 @@ def _sync_get_all(
     return items
 
 
+# ---------------------------
+# GET
+# ---------------------------
 @http_app.command("get")
 def get(
-    path: Annotated[str, typer.Argument(..., help="e.g. /api/users")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[
-        Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True, help="Prefer prompt/STDIN.")
-    ],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    timeout: Annotated[Optional[float], typer.Option(None, "--timeout")],
-    verify_ssl: Annotated[Optional[bool], typer.Option(None, "--verify-ssl/--insecure")],
-    log_level: Annotated[Optional[str], typer.Option(None, "--log-level")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    output: Annotated[Optional[str], typer.Option("table", "--output")],
-    field: Annotated[list[str], typer.Option([], "--fields")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    page_size: Annotated[Optional[int], typer.Option(None, "--page-size")],
-    all_pages: Annotated[bool, typer.Option(False, "--all", help="Iterate all pages via pager.")],
-    array_key: Annotated[Optional[str], typer.Option(None, "--array-key", help="Collection key (e.g., users)")],
-    param: Annotated[list[str], typer.Option([], "--param", help="Query key=value")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    path: Annotated[str, Argument(..., help="e.g. /api/users")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True, help="Prefer prompt/STDIN.")] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    timeout: Annotated[Optional[float], Option("--timeout")] = None,
+    verify_ssl: Annotated[Optional[bool], Option("--verify-ssl/--insecure")] = None,
+    log_level: Annotated[
+        Optional[str],
+        Option(
+            "--log-level",
+            click_type=Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False),
+            help="DEBUG|INFO|WARNING|ERROR|CRITICAL",
+        ),
+    ] = None,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    field: Annotated[list[str], Option("--fields", help="Repeatable: --fields id --fields name")] = [],
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    page_size: Annotated[Optional[int], Option("--page-size")] = None,
+    all_pages: Annotated[bool, Option("--all", is_flag=True, help="Iterate all pages via pager.")] = False,
+    array_key: Annotated[Optional[str], Option("--array-key", help="Collection key (e.g., users)")] = None,
+    param: Annotated[list[str], Option("--param", help="Query key=value (repeatable)")] = [],
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
     as_dict: Annotated[
         Optional[str],
-        typer.Option(
-            None,
-            "--as-dict",
-            metavar="BOOL",
-            help="Boolean: true/false. Omit to use the default from Settings.return_models.",
-        ),
-    ],
+        Option("--as-dict", metavar="BOOL", help="true/false. Omit to use the default from Settings.return_models.")
+    ] = None,
 ) -> None:
+    # password handling
     pw = password
     if password_stdin and not token:
         pw = sys.stdin.readline().rstrip("\n")
@@ -162,9 +124,9 @@ def get(
         token=token,
         timeout=timeout,
         verify_ssl=verify_ssl,
-        log_level=log_level,
-        engine=engine,
-        output=output,
+        log_level=(log_level.upper() if log_level else None),
+        engine=engine.lower(),
+        output=output.lower(),
         fields=field,
         jq=jq,
         profile=profile,
@@ -172,24 +134,24 @@ def get(
         all_pages=all_pages,
         password_stdin=password_stdin,
         array_key=array_key,
-        as_dict=_parse_bool_opt(as_dict),
+        as_dict=parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
-    params = _parse_params(param)
+    params = parse_params(param)
 
     try:
         if cfg.engine == "async":
-
+            from dhis2_client import DHIS2AsyncClient
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
-                    if cfg.all_pages:
+                    if cfg.all_pages and cfg.page_size:
                         return await _async_get_all(client, path, params, cfg.page_size, cfg.array_key)
                     return await client.get(path, params=params)
-
             data = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
-                if cfg.all_pages:
+                if cfg.all_pages and cfg.page_size:
                     data = _sync_get_all(client, path, params, cfg.page_size, cfg.array_key)
                 else:
                     data = client.get(path, params=params)
@@ -197,36 +159,53 @@ def get(
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    render_output(_to_plain_json(data), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
+    render_output(to_plain_json(data), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
 
 
+# ---------------------------
+# POST
+# ---------------------------
 @http_app.command("post")
 def post(
-    path: str,
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    timeout: Annotated[Optional[float], typer.Option(None, "--timeout")],
-    verify_ssl: Annotated[Optional[bool], typer.Option(None, "--verify-ssl/--insecure")],
-    log_level: Annotated[Optional[str], typer.Option(None, "--log-level")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    output: Annotated[Optional[str], typer.Option("table", "--output")],
-    field: Annotated[list[str], typer.Option([], "--fields")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    json_body: Annotated[Optional[str], typer.Option(None, "--json", help="Raw JSON or @file.json")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
-    as_dict: Annotated[
+    path: Annotated[str, Argument(..., help="e.g. /api/dataElements")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    timeout: Annotated[Optional[float], Option("--timeout")] = None,
+    verify_ssl: Annotated[Optional[bool], Option("--verify-ssl/--insecure")] = None,
+    log_level: Annotated[
         Optional[str],
-        typer.Option(
-            None,
-            "--as-dict",
-            metavar="BOOL",
-            help="Boolean: true/false. Omit to use the default from Settings.return_models.",
+        Option(
+            "--log-level",
+            click_type=Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False),
+            help="DEBUG|INFO|WARNING|ERROR|CRITICAL",
         ),
-    ],
+    ] = None,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    field: Annotated[list[str], Option("--fields")] = [],
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    json_body: Annotated[Optional[str], Option("--json", help="Raw JSON or @file.json")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
+    as_dict: Annotated[Optional[str], Option("--as-dict", metavar="BOOL", help="true/false. Use Settings default if omitted.")] = None,
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -241,9 +220,9 @@ def post(
         token=token,
         timeout=timeout,
         verify_ssl=verify_ssl,
-        log_level=log_level,
-        engine=engine,
-        output=output,
+        log_level=(log_level.upper() if log_level else None),
+        engine=engine.lower(),
+        output=output.lower(),
         fields=field,
         jq=jq,
         profile=profile,
@@ -251,56 +230,73 @@ def post(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
-        as_dict=_parse_bool_opt(as_dict),
+        as_dict=parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
-    payload = _load_json_arg(json_body)
+    payload = load_json_arg(json_body)
 
     try:
         if cfg.engine == "async":
-
+            from dhis2_client import DHIS2AsyncClient
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
                     return await client.post_json(path, payload=payload)
-
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 res = client.post_json(path, payload=payload)
     except Exception as e:
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    render_output(_to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
+    render_output(to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
 
 
+# ---------------------------
+# PUT
+# ---------------------------
 @http_app.command("put")
 def put(
-    path: str,
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    timeout: Annotated[Optional[float], typer.Option(None, "--timeout")],
-    verify_ssl: Annotated[Optional[bool], typer.Option(None, "--verify-ssl/--insecure")],
-    log_level: Annotated[Optional[str], typer.Option(None, "--log-level")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    output: Annotated[Optional[str], typer.Option("table", "--output")],
-    field: Annotated[list[str], typer.Option([], "--fields")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    json_body: Annotated[Optional[str], typer.Option(None, "--json", help="Raw JSON or @file.json")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
-    as_dict: Annotated[
+    path: Annotated[str, Argument(..., help="e.g. /api/dataElements/ID")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    timeout: Annotated[Optional[float], Option("--timeout")] = None,
+    verify_ssl: Annotated[Optional[bool], Option("--verify-ssl/--insecure")] = None,
+    log_level: Annotated[
         Optional[str],
-        typer.Option(
-            None,
-            "--as-dict",
-            metavar="BOOL",
-            help="Boolean: true/false. Omit to use the default from Settings.return_models.",
+        Option(
+            "--log-level",
+            click_type=Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False),
+            help="DEBUG|INFO|WARNING|ERROR|CRITICAL",
         ),
-    ],
+    ] = None,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    field: Annotated[list[str], Option("--fields")] = [],
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    json_body: Annotated[Optional[str], Option("--json", help="Raw JSON or @file.json")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
+    as_dict: Annotated[Optional[str], Option("--as-dict", metavar="BOOL", help="true/false. Use Settings default if omitted.")] = None,
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -315,9 +311,9 @@ def put(
         token=token,
         timeout=timeout,
         verify_ssl=verify_ssl,
-        log_level=log_level,
-        engine=engine,
-        output=output,
+        log_level=(log_level.upper() if log_level else None),
+        engine=engine.lower(),
+        output=output.lower(),
         fields=field,
         jq=jq,
         profile=profile,
@@ -325,55 +321,72 @@ def put(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
-        as_dict=_parse_bool_opt(as_dict),
+        as_dict=parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
-    payload = _load_json_arg(json_body)
+    payload = load_json_arg(json_body)
 
     try:
         if cfg.engine == "async":
-
+            from dhis2_client import DHIS2AsyncClient
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
                     return await client.put_json(path, payload=payload)
-
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 res = client.put_json(path, payload=payload)
     except Exception as e:
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    render_output(_to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
+    render_output(to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
 
 
+# ---------------------------
+# DELETE
+# ---------------------------
 @http_app.command("delete")
 def delete(
-    path: str,
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    timeout: Annotated[Optional[float], typer.Option(None, "--timeout")],
-    verify_ssl: Annotated[Optional[bool], typer.Option(None, "--verify-ssl/--insecure")],
-    log_level: Annotated[Optional[str], typer.Option(None, "--log-level")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    output: Annotated[Optional[str], typer.Option("table", "--output")],
-    field: Annotated[list[str], typer.Option([], "--fields")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
-    as_dict: Annotated[
+    path: Annotated[str, Argument(..., help="e.g. /api/dataElements/ID")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    timeout: Annotated[Optional[float], Option("--timeout")] = None,
+    verify_ssl: Annotated[Optional[bool], Option("--verify-ssl/--insecure")] = None,
+    log_level: Annotated[
         Optional[str],
-        typer.Option(
-            None,
-            "--as-dict",
-            metavar="BOOL",
-            help="Boolean: true/false. Omit to use the default from Settings.return_models.",
+        Option(
+            "--log-level",
+            click_type=Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False),
+            help="DEBUG|INFO|WARNING|ERROR|CRITICAL",
         ),
-    ],
+    ] = None,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    field: Annotated[list[str], Option("--fields")] = [],
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
+    as_dict: Annotated[Optional[str], Option("--as-dict", metavar="BOOL", help="true/false. Use Settings default if omitted.")] = None,
 ) -> None:
     pw = password
     if password_stdin and not token:
@@ -388,9 +401,9 @@ def delete(
         token=token,
         timeout=timeout,
         verify_ssl=verify_ssl,
-        log_level=log_level,
-        engine=engine,
-        output=output,
+        log_level=(log_level.upper() if log_level else None),
+        engine=engine.lower(),
+        output=output.lower(),
         fields=field,
         jq=jq,
         profile=profile,
@@ -398,23 +411,23 @@ def delete(
         all_pages=False,
         password_stdin=password_stdin,
         array_key=None,
-        as_dict=_parse_bool_opt(as_dict),
+        as_dict=parse_bool_opt(as_dict),
     )
     settings = make_settings(cfg)
 
     try:
         if cfg.engine == "async":
-
+            from dhis2_client import DHIS2AsyncClient
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
                     return await client.delete(path)
-
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 res = client.delete(path)
     except Exception as e:
         print_http_error(e, verbose=verbose)
         raise typer.Exit(code=4) from e
 
-    render_output(_to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)
+    render_output(to_plain_json(res), output=cfg.output, fields=cfg.fields, jq=cfg.jq)

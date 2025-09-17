@@ -4,7 +4,7 @@ import asyncio
 import sys
 import traceback
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Any, Dict
 
 from pydantic import SecretStr
 
@@ -21,7 +21,7 @@ class CLISettings:
     timeout: Optional[float] = None
     verify_ssl: Optional[bool] = None
     log_level: Optional[str] = None
-    engine: Optional[str] = None  # "sync" | "async"
+    engine: Optional[str] = None
     output: Optional[str] = None
     fields: Sequence[str] = ()
     jq: Optional[str] = None
@@ -57,6 +57,7 @@ def resolve_settings(
     array_key: Optional[str],
     as_dict: Optional[bool] = None,
 ) -> CLISettings:
+    """Collect parsed CLI options into a single dataclass (no side-effects)."""
     return CLISettings(
         base_url=base_url,
         username=username,
@@ -86,10 +87,10 @@ def make_settings(cfg: CLISettings) -> Settings:
     If cfg.as_dict is True  -> return_models=False (dict/JSON).
     If cfg.as_dict is False -> return_models=True  (Pydantic models).
     """
-    kwargs = dict(
+    kwargs: Dict[str, Any] = dict(
         base_url=cfg.base_url,
         verify_ssl=True if cfg.verify_ssl is None else cfg.verify_ssl,
-        timeout=30 if cfg.timeout is None else int(cfg.timeout),
+        timeout=30.0 if cfg.timeout is None else float(cfg.timeout),
         username=cfg.username,
         password=SecretStr(cfg.password) if cfg.password else None,
         token=SecretStr(cfg.token) if cfg.token else None,
@@ -100,9 +101,19 @@ def make_settings(cfg: CLISettings) -> Settings:
     return Settings(**kwargs)
 
 
+def _format_conflict(c: dict) -> str:
+    """Format a DHIS2 import conflict safely like 'object: message'."""
+    obj = c.get("object", "?")
+    msg = c.get("value") or c.get("message") or "?"
+    return f"{obj}: {msg}"
+
+
 def print_http_error(e: BaseException, *, verbose: bool = False) -> None:
     """
     Compact error output for DHIS2Error/NetworkError and generic exceptions.
+
+    - Prints status code, path, and message when available.
+    - If DHIS2 import report details contain conflicts, shows a concise summary.
     """
     parts = []
     if isinstance(e, (DHIS2Error, NetworkError)):
@@ -114,6 +125,17 @@ def print_http_error(e: BaseException, *, verbose: bool = False) -> None:
         if path:
             parts.append(f"path={path}")
         parts.append(msg)
+
+        # Optional details payload from server (import reports, etc.)
+        details = getattr(e, "details", None)
+        if isinstance(details, dict):
+            response = details.get("response") or {}
+            conflicts = response.get("conflicts") or response.get("errorReports") or []
+            if isinstance(conflicts, list) and conflicts:
+                brief = "; ".join(_format_conflict(c) for c in conflicts[:5])
+                if len(conflicts) > 5:
+                    brief += f" (+{len(conflicts)-5} more)"
+                parts.append(f"conflicts={brief}")
     else:
         parts.append(str(e) or e.__class__.__name__)
 
@@ -123,4 +145,16 @@ def print_http_error(e: BaseException, *, verbose: bool = False) -> None:
 
 
 def run_async(coro):
-    return asyncio.run(coro)
+    """
+    Run an async coroutine from sync code.
+    - In a normal CLI (no running loop), uses asyncio.run(coro).
+    - If a loop is already running (e.g., embedded/REPL), spins a temp loop.
+    """
+    try:
+        return asyncio.run(coro)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()

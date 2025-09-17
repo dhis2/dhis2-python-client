@@ -3,16 +3,21 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, TYPE_CHECKING
 from urllib.parse import urlencode
 
 import typer
-from dhis2_client import DHIS2AsyncClient, DHIS2Client
+from click import Choice  # <- enum-like validation
 
 from ..common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
-from ..output import render_output  # <-- added
+from ..output import render_output
+
+if TYPE_CHECKING:
+    from dhis2_client import DHIS2Client, DHIS2AsyncClient
 
 dvs_app = typer.Typer(help="Data value set import/export (JSON)")
+
+Option = typer.Option
 
 
 def _parse_params(items: List[str]) -> Dict[str, str]:
@@ -45,22 +50,25 @@ def _write_json_to(data: Any, dest: str | None) -> None:
 
 @dvs_app.command("export")
 def export(
-    data_set: Annotated[Optional[str], typer.Option(None, "--data-set", help="dataSet UID")],
-    period: Annotated[Optional[str], typer.Option(None, "--period", help="e.g. 202401 or 2024Q1")],
-    org_unit: Annotated[Optional[str], typer.Option(None, "--org-unit")],
-    start_date: Annotated[Optional[str], typer.Option(None, "--start-date")],
-    end_date: Annotated[Optional[str], typer.Option(None, "--end-date")],
-    children: Annotated[bool, typer.Option(False, "--children/--no-children")],
-    param: Annotated[list[str], typer.Option([], "--param", help="Extra query params key=value")],
-    dest: Annotated[Optional[str], typer.Option("-", "--dest", help="Output path or '-' for stdout")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    data_set: Annotated[Optional[str], Option("--data-set", help="dataSet UID")] = None,
+    period: Annotated[Optional[str], Option("--period", help="e.g. 202401 or 2024Q1")] = None,
+    org_unit: Annotated[Optional[str], Option("--org-unit")] = None,
+    start_date: Annotated[Optional[str], Option("--start-date")] = None,
+    end_date: Annotated[Optional[str], Option("--end-date")] = None,
+    children: Annotated[bool, Option("--children/--no-children")] = False,
+    param: Annotated[List[str], Option("--param", help="Extra query params key=value")] = [],
+    dest: Annotated[Optional[str], Option("--dest", help="Output path or '-' for stdout")] = "-",
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option("--engine", click_type=Choice(["sync", "async"], case_sensitive=False), help="Default: sync")
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     """Export a dataValueSet as JSON to file or stdout."""
     pw = password
@@ -77,7 +85,7 @@ def export(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
+        engine=engine.lower(),
         output="json",
         fields=[],
         jq=None,
@@ -108,13 +116,14 @@ def export(
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
                     return await client.get(path, params=params)
-
             data = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 data = client.get(path, params=params)
     except Exception as e:
@@ -126,22 +135,28 @@ def export(
 
 @dvs_app.command("import")
 def import_(
-    source: Annotated[str, typer.Option(..., "--source", help="JSON text, @file.json, or '-' for stdin")],
-    dry_run: Annotated[bool, typer.Option(False, "--dry-run/--commit")],
+    source: Annotated[str, Option("--source", help="JSON text, @file.json, or '-' for stdin")],
+    dry_run: Annotated[bool, Option("--dry-run/--commit")] = False,
     param: Annotated[
-        list[str],
-        typer.Option([], "--param", help="Extra query params key=value (e.g., importStrategy=CREATE_AND_UPDATE)"),
-    ],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+        List[str],
+        Option("--param", help="Extra query params key=value (e.g., importStrategy=CREATE_AND_UPDATE)")
+    ] = [],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option("--engine", click_type=Choice(["sync", "async"], case_sensitive=False), help="Default: sync")
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str,
+        Option("--output", "-o", click_type=Choice(["table", "json", "yaml"], case_sensitive=False))
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     """Import a dataValueSet from JSON (stdin or file)."""
     pw = password
@@ -160,8 +175,8 @@ def import_(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -178,17 +193,19 @@ def import_(
     params.update(_parse_params(param))
 
     path = "/api/dataValueSets"
-    path_q = f"{path}?{urlencode(params, doseq=True)}" if params else path  # <-- ensure params are sent
+    # Note: keeping query in URL to avoid assuming client.post_json supports params=.
+    path_q = f"{path}?{urlencode(params, doseq=True)}" if params else path
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
                     return await client.post_json(path_q, payload=payload)
-
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
             with DHIS2Client.from_settings(settings) as client:
                 res = client.post_json(path_q, payload=payload)
     except Exception as e:

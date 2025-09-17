@@ -1,24 +1,36 @@
 from __future__ import annotations
 
 import sys
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, TYPE_CHECKING
 
 import typer
-from dhis2_client import DHIS2AsyncClient, DHIS2Client
+from click import Choice  # <-- robust value validation
 
 from ..common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
 from ..output import render_output
 
+if TYPE_CHECKING:
+    from dhis2_client import DHIS2Client, DHIS2AsyncClient
+
 metadata_app = typer.Typer(help="Generic metadata operations for any DHIS2 collection")
 
+Option = typer.Option
+Argument = typer.Argument
 
-def _normalize_collection(res: Dict[str, Any], array_key: Optional[str]) -> list[dict]:
+
+def _normalize_collection(res: Dict[str, Any] | List[dict] | Any, array_key: Optional[str]) -> List[dict]:
+    """
+    Try to find the list payload for a DHIS2 collection response.
+    If 'array_key' is provided and present, return that list.
+    Else, return the first list of dicts found, otherwise coerce to list.
+    """
     if isinstance(res, dict):
         if array_key and array_key in res and isinstance(res[array_key], list):
             return res[array_key]
         for _k, v in res.items():
-            if isinstance(v, list) and (not v or (v and isinstance(v[0], dict))):
-                return v
+            if isinstance(v, list) and (not v or isinstance(v[0], dict)):
+                return v  # first list of dicts
+        return [res]
     return res if isinstance(res, list) else [res]
 
 
@@ -34,26 +46,39 @@ def _parse_filters(filters: List[str]) -> List[str]:
 
 @metadata_app.command("search")
 def search(
-    resource: Annotated[str, typer.Argument(..., help="Collection name, e.g. dataElements, users, organisationUnits")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    fields: Annotated[list[str], typer.Option([], "--fields", help="Projection fields")],
-    filter_: Annotated[list[str], typer.Option([], "--filter", help="key:op:value (repeatable)")],
-    order: Annotated[Optional[str], typer.Option(None, "--order", help="e.g. name:asc")],
-    query: Annotated[Optional[str], typer.Option(None, "--query", help="Full-text query where supported")],
-    page_size: Annotated[Optional[int], typer.Option(None, "--page-size")],
-    all_pages: Annotated[bool, typer.Option(False, "--all", help="Iterate all pages")],
-    output: Annotated[Optional[str], typer.Option("table", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    array_key: Annotated[
-        Optional[str], typer.Option(None, "--array-key", help="Collection key (defaults to resource)")
-    ],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    resource: Annotated[str, Argument(..., help="Collection name, e.g. dataElements, users, organisationUnits")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    fields: Annotated[List[str], Option("--fields", help="Projection fields (repeatable)")] = [],
+    filter_: Annotated[List[str], Option("--filter", help="key:op:value (repeatable)")] = [],
+    order: Annotated[Optional[str], Option("--order", help="e.g. name:asc")] = None,
+    query: Annotated[Optional[str], Option("--query", help="Full-text query where supported")] = None,
+    page_size: Annotated[Optional[int], Option("--page-size")] = None,
+    all_pages: Annotated[bool, Option("--all", is_flag=True, help="Iterate all pages")] = False,
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: table)",
+        ),
+    ] = "table",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    array_key: Annotated[Optional[str], Option("--array-key", help="Collection key (defaults to resource)")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     pw = password
     if password_stdin and not token:
@@ -70,8 +95,8 @@ def search(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=fields,
         jq=jq,
         profile=profile,
@@ -96,6 +121,7 @@ def search(
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
@@ -112,6 +138,8 @@ def search(
 
             data = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
+
             with DHIS2Client.from_settings(settings) as client:
                 if cfg.all_pages:
                     first = client.get(path, params=params)
@@ -133,19 +161,34 @@ def search(
 
 @metadata_app.command("show")
 def show(
-    resource: Annotated[str, typer.Argument(..., help="e.g. dataElements")],
-    id: Annotated[str, typer.Argument(..., help="UID")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    fields: Annotated[list[str], typer.Option([], "--fields")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose")],
+    resource: Annotated[str, Argument(..., help="e.g. dataElements")],
+    id: Annotated[str, Argument(..., help="UID")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    fields: Annotated[List[str], Option("--fields")] = [],
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True)] = False,
 ):
     pw = password
     if password_stdin and not token:
@@ -161,8 +204,8 @@ def show(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=fields,
         jq=jq,
         profile=profile,
@@ -174,12 +217,13 @@ def show(
     settings = make_settings(cfg)
 
     path = f"/api/{resource}/{id}"
-    params = {}
+    params: Dict[str, Any] = {}
     if fields:
         params["fields"] = ",".join(fields)
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
@@ -187,6 +231,8 @@ def show(
 
             data = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
+
             with DHIS2Client.from_settings(settings) as client:
                 data = client.get(path, params=params)
     except Exception as e:
@@ -198,22 +244,37 @@ def show(
 
 @metadata_app.command("create")
 def create(
-    resource: Annotated[str, typer.Argument(..., help="e.g. dataElements")],
-    json_body: Annotated[str, typer.Option(..., "--json", help="Raw JSON, @file.json")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose")],
+    resource: Annotated[str, Argument(..., help="e.g. dataElements")],
+    json_body: Annotated[str, Option(..., "--json", help="Raw JSON, @file.json")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True)] = False,
 ):
-    from ..http import _load_json_arg
+    from ..utils import load_json_arg
 
-    payload = _load_json_arg(json_body)
+    payload = load_json_arg(json_body)
 
     pw = password
     if password_stdin and not token:
@@ -229,8 +290,8 @@ def create(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -244,6 +305,7 @@ def create(
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
@@ -251,6 +313,8 @@ def create(
 
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
+
             with DHIS2Client.from_settings(settings) as client:
                 res = client.post_json(path, payload=payload)
     except Exception as e:
@@ -262,23 +326,38 @@ def create(
 
 @metadata_app.command("update")
 def update(
-    resource: Annotated[str, typer.Argument(..., help="e.g. dataElements")],
-    id: Annotated[str, typer.Argument(..., help="UID")],
-    json_body: Annotated[str, typer.Option(..., "--json", help="Raw JSON, @file.json")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose")],
+    resource: Annotated[str, Argument(..., help="e.g. dataElements")],
+    id: Annotated[str, Argument(..., help="UID")],
+    json_body: Annotated[str, Option(..., "--json", help="Raw JSON, @file.json")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True)] = False,
 ):
-    from ..http import _load_json_arg
+    from ..utils import load_json_arg
 
-    payload = _load_json_arg(json_body)
+    payload = load_json_arg(json_body)
 
     pw = password
     if password_stdin and not token:
@@ -294,8 +373,8 @@ def update(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -309,6 +388,7 @@ def update(
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
@@ -316,6 +396,8 @@ def update(
 
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
+
             with DHIS2Client.from_settings(settings) as client:
                 res = client.put_json(path, payload=payload)
     except Exception as e:
@@ -327,18 +409,33 @@ def update(
 
 @metadata_app.command("delete")
 def delete(
-    resource: Annotated[str, typer.Argument(..., help="e.g. dataElements")],
-    id: Annotated[str, typer.Argument(..., help="UID")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose")],
+    resource: Annotated[str, Argument(..., help="e.g. dataElements")],
+    id: Annotated[str, Argument(..., help="UID")],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
+        ),
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True)] = False,
 ):
     pw = password
     if password_stdin and not token:
@@ -354,8 +451,8 @@ def delete(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -369,6 +466,7 @@ def delete(
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
@@ -376,6 +474,8 @@ def delete(
 
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
+
             with DHIS2Client.from_settings(settings) as client:
                 res = client.delete(path)
     except Exception as e:
@@ -387,29 +487,43 @@ def delete(
 
 @metadata_app.command("bulk-import")
 def bulk_import(
-    source: Annotated[str, typer.Option(..., "--source", help="JSON text, @file.json, or '-' for stdin")],
-    dry_run: Annotated[bool, typer.Option(False, "--dry-run/--commit")],
+    source: Annotated[str, Option(..., "--source", help="JSON text, @file.json, or '-' for stdin")],
+    dry_run: Annotated[bool, Option("--dry-run/--commit")] = False,
     param: Annotated[
-        list[str],
-        typer.Option(
-            [], "--param", help="Extra query params key=value (e.g., importStrategy=CREATE_AND_UPDATE, atomicMode=ALL)"
+        List[str],
+        Option("--param", help="Extra query params key=value (e.g., importStrategy=CREATE_AND_UPDATE, atomicMode=ALL)")
+    ] = [],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str,
+        Option(
+            "--engine",
+            click_type=Choice(["sync", "async"], case_sensitive=False),
+            help="sync|async (default: sync)",
         ),
-    ],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str,
+        Option(
+            "--output",
+            "-o",
+            click_type=Choice(["table", "json", "yaml"], case_sensitive=False),
+            help="table|json|yaml (default: json)",
+        ),
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     """POST /api/metadata with a DHIS2 metadata JSON document."""
     import gzip
     import json
     from pathlib import Path
+    from urllib.parse import urlencode
 
     def _read_json_from(src: str):
         if src == "-":
@@ -422,8 +536,8 @@ def bulk_import(
             return json.loads(data.decode("utf-8"))
         return json.loads(src)
 
-    def _parse_params(items: list[str]) -> dict[str, str]:
-        params: dict[str, str] = {}
+    def _parse_params(items: List[str]) -> Dict[str, str]:
+        params: Dict[str, str] = {}
         for it in items:
             if "=" not in it:
                 raise typer.BadParameter(f"Invalid --param '{it}', expected key=value")
@@ -447,8 +561,8 @@ def bulk_import(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output,
+        engine=engine.lower(),
+        output=output.lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -464,12 +578,11 @@ def bulk_import(
         params["dryRun"] = "true"
     path = "/api/metadata"
     if params:
-        from urllib.parse import urlencode
-
         path = f"{path}?{urlencode(params, doseq=True)}"
 
     try:
         if cfg.engine == "async":
+            from dhis2_client import DHIS2AsyncClient
 
             async def _run():
                 async with DHIS2AsyncClient.from_settings(settings) as client:
@@ -477,6 +590,8 @@ def bulk_import(
 
             res = run_async(_run())
         else:
+            from dhis2_client import DHIS2Client
+
             with DHIS2Client.from_settings(settings) as client:
                 res = client.post_json(path, payload=payload)
     except Exception as e:

@@ -4,16 +4,22 @@ import gzip
 import json
 import sys
 from pathlib import Path
-from typing import Annotated, Any, Dict, Literal, Optional
+from typing import Annotated, Any, Dict, Optional, TYPE_CHECKING, List, Literal
 from urllib.parse import urlencode
 
 import typer
-from dhis2_client import DHIS2AsyncClient, DHIS2Client
+from click import Choice  # <- enum-like validation for Typer
 
 from ..common import CLISettings, make_settings, print_http_error, resolve_settings, run_async
 from ..output import render_output
 
+if TYPE_CHECKING:
+    from dhis2_client import DHIS2Client, DHIS2AsyncClient
+
 bulk_app = typer.Typer(help="Generic bulk JSON sender (POST/PUT/PATCH to any /api/* path)")
+
+Option = typer.Option
+Argument = typer.Argument
 
 
 def _read_json(source: str):
@@ -28,7 +34,7 @@ def _read_json(source: str):
     return json.loads(source)
 
 
-def _parse_params(items: list[str]) -> Dict[str, str]:
+def _parse_params(items: List[str]) -> Dict[str, str]:
     params: Dict[str, str] = {}
     for it in items:
         if "=" not in it:
@@ -46,6 +52,7 @@ def _send(
     settings,
 ):
     if cfg.engine == "async":
+        from dhis2_client import DHIS2AsyncClient
 
         async def _run():
             async with DHIS2AsyncClient.from_settings(settings) as client:
@@ -53,20 +60,19 @@ def _send(
                     return await client.post_json(path, payload=payload)
                 if method == "PUT":
                     return await client.put_json(path, payload=payload)
-                # PATCH (if your client supports it; otherwise fallback to put_json or raise)
                 if hasattr(client, "patch_json"):
-                    return await client.patch_json(path, payload=payload)  # type: ignore
+                    return await client.patch_json(path, payload=payload)  # type: ignore[attr-defined]
                 raise typer.BadParameter("Async client has no patch_json()")
-
         return run_async(_run())
     else:
+        from dhis2_client import DHIS2Client
         with DHIS2Client.from_settings(settings) as client:
             if method == "POST":
                 return client.post_json(path, payload=payload)
             if method == "PUT":
                 return client.put_json(path, payload=payload)
             if hasattr(client, "patch_json"):
-                return client.patch_json(path, payload=payload)  # type: ignore
+                return client.patch_json(path, payload=payload)  # type: ignore[attr-defined]
             raise typer.BadParameter("Sync client has no patch_json()")
 
 
@@ -79,11 +85,11 @@ def _common(
     password: Optional[str],
     token: Optional[str],
     password_stdin: bool,
-    engine: Optional[str],
+    engine: str,
     profile: Optional[str],
-    output: Optional[str],
+    output: str,
     jq: Optional[str],
-    params_kv: list[str],
+    params_kv: List[str],
     verbose: bool,
 ):
     if not path.startswith("/api/"):
@@ -105,8 +111,8 @@ def _common(
         timeout=None,
         verify_ssl=None,
         log_level=None,
-        engine=engine,
-        output=output or "json",
+        engine=(engine or "sync").lower(),
+        output=(output or "json").lower(),
         fields=[],
         jq=jq,
         profile=profile,
@@ -131,21 +137,23 @@ def _common(
 
 @bulk_app.command("post")
 def post(
-    path: Annotated[str, typer.Argument(..., help="Absolute API path, e.g. /api/events")],
-    source: Annotated[
-        str, typer.Option(..., "--source", help="JSON text, @file.json, @file.json.gz, or '-' for stdin")
-    ],
-    param: Annotated[list[str], typer.Option([], "--param", help="Query params key=value")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    path: Annotated[str, Argument(..., help="Absolute API path, e.g. /api/events")],
+    source: Annotated[str, Option("--source", help="JSON text, @file.json, @file.json.gz, or '-' for stdin")],
+    param: Annotated[List[str], Option("--param", help="Query params key=value")] = [],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str, Option("--engine", click_type=Choice(["sync", "async"], case_sensitive=False), help="Default: sync")
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str, Option("--output", "-o", click_type=Choice(["table", "json", "yaml"], case_sensitive=False))
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     _common(
         "POST",
@@ -167,21 +175,23 @@ def post(
 
 @bulk_app.command("put")
 def put(
-    path: Annotated[str, typer.Argument(..., help="Absolute API path, e.g. /api/events/ID")],
-    source: Annotated[
-        str, typer.Option(..., "--source", help="JSON text, @file.json, @file.json.gz, or '-' for stdin")
-    ],
-    param: Annotated[list[str], typer.Option([], "--param", help="Query params key=value")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    path: Annotated[str, Argument(..., help="Absolute API path, e.g. /api/events/ID")],
+    source: Annotated[str, Option("--source", help="JSON text, @file.json, @file.json.gz, or '-' for stdin")],
+    param: Annotated[List[str], Option("--param", help="Query params key=value")] = [],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str, Option("--engine", click_type=Choice(["sync", "async"], case_sensitive=False), help="Default: sync")
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str, Option("--output", "-o", click_type=Choice(["table", "json", "yaml"], case_sensitive=False))
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     _common(
         "PUT",
@@ -203,21 +213,23 @@ def put(
 
 @bulk_app.command("patch")
 def patch(
-    path: Annotated[str, typer.Argument(..., help="Absolute API path, e.g. /api/events/ID")],
-    source: Annotated[
-        str, typer.Option(..., "--source", help="JSON text, @file.json, @file.json.gz, or '-' for stdin")
-    ],
-    param: Annotated[list[str], typer.Option([], "--param", help="Query params key=value")],
-    base_url: Annotated[Optional[str], typer.Option(None, "--base-url")],
-    username: Annotated[Optional[str], typer.Option(None, "--username")],
-    password: Annotated[Optional[str], typer.Option(None, "--password", prompt=False, hide_input=True)],
-    token: Annotated[Optional[str], typer.Option(None, "--token")],
-    password_stdin: Annotated[bool, typer.Option(False, "--password-stdin")],
-    engine: Annotated[Optional[str], typer.Option(None, "--engine", help="sync|async")],
-    profile: Annotated[Optional[str], typer.Option(None, "--profile")],
-    output: Annotated[Optional[str], typer.Option("json", "--output")],
-    jq: Annotated[Optional[str], typer.Option(None, "--jq")],
-    verbose: Annotated[bool, typer.Option(False, "--verbose", help="Show full error details on failure.")],
+    path: Annotated[str, Argument(..., help="Absolute API path, e.g. /api/events/ID")],
+    source: Annotated[str, Option("--source", help="JSON text, @file.json, @file.json.gz, or '-' for stdin")],
+    param: Annotated[List[str], Option("--param", help="Query params key=value")] = [],
+    base_url: Annotated[Optional[str], Option("--base-url")] = None,
+    username: Annotated[Optional[str], Option("--username")] = None,
+    password: Annotated[Optional[str], Option("--password", prompt=False, hide_input=True)] = None,
+    token: Annotated[Optional[str], Option("--token")] = None,
+    password_stdin: Annotated[bool, Option("--password-stdin", is_flag=True)] = False,
+    engine: Annotated[
+        str, Option("--engine", click_type=Choice(["sync", "async"], case_sensitive=False), help="Default: sync")
+    ] = "sync",
+    profile: Annotated[Optional[str], Option("--profile")] = None,
+    output: Annotated[
+        str, Option("--output", "-o", click_type=Choice(["table", "json", "yaml"], case_sensitive=False))
+    ] = "json",
+    jq: Annotated[Optional[str], Option("--jq")] = None,
+    verbose: Annotated[bool, Option("--verbose", is_flag=True, help="Show full error details on failure.")] = False,
 ):
     _common(
         "PATCH",
