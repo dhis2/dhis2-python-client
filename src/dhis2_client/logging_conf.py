@@ -14,10 +14,12 @@ _VALID_LEVELS = {
     "DEBUG": logging.DEBUG,
 }
 
+
 def _coerce_level(name_or_none: str | None) -> int:
     # Priority: explicit arg -> DHIS2_LOG_LEVEL env -> WARNING default
     raw = (name_or_none or os.getenv("DHIS2_LOG_LEVEL") or "WARNING").upper().strip()
     return _VALID_LEVELS.get(raw, logging.WARNING)
+
 
 def configure_logging(
     level: str | None = None,

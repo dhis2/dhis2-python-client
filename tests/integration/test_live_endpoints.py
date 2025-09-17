@@ -15,7 +15,7 @@ requires_env = pytest.mark.skipif(
 async def test_live_system_info():
     settings = Settings()
     async with DHIS2AsyncClient.from_settings(settings) as client:
-        info = await client.get_system_info()
+        info = await client.get_system_info(as_dict=False)
         assert info.version
 
 

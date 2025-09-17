@@ -1,90 +1,121 @@
 from __future__ import annotations
 
+import dataclasses
 import json
-from typing import Any, Iterable, Mapping, Sequence
+import sys
+from enum import Enum
+from typing import Any
 
+import jmespath
 import yaml
 from rich.console import Console
 from rich.table import Table
 
-from .utils import make_json_safe, to_plain
+_console = Console()
 
-console = Console()
 
-def _is_mapping(x: Any) -> bool:
-    return isinstance(x, Mapping)
+def _to_plain(obj: Any) -> Any:
+    # Scalars
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
 
-def _is_sequence_of_mappings(x: Any) -> bool:
-    return isinstance(x, Sequence) and x and all(isinstance(i, Mapping) for i in x)
+    # Collections
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_plain(x) for x in obj]
+    if isinstance(obj, dict):
+        return {str(k): _to_plain(v) for k, v in obj.items()}
 
-def _stringify(x: Any) -> str:
-    if isinstance(x, (dict, list, tuple, set)):
+    # Dataclasses
+    if dataclasses.is_dataclass(obj):
+        return _to_plain(dataclasses.asdict(obj))
+
+    # Enums
+    if isinstance(obj, Enum):
+        return _to_plain(obj.value)
+
+    # Pydantic v2
+    if hasattr(obj, "model_dump") and callable(obj.model_dump):
         try:
-            return json.dumps(x, ensure_ascii=False)
+            return _to_plain(obj.model_dump())
         except Exception:
-            return str(x)
-    return str(x)
+            pass
 
-def _render_kv_table(d: Mapping[str, Any]) -> None:
-    table = Table(show_header=False)
-    table.add_column("Key", style="bold")
-    table.add_column("Value")
-    for k, v in d.items():
-        table.add_row(str(k), _stringify(v))
-    console.print(table)
+    # Pydantic v1
+    if hasattr(obj, "dict") and callable(obj.dict):
+        try:
+            return _to_plain(obj.dict())
+        except Exception:
+            pass
 
-def _render_list_table(rows: Iterable[Mapping[str, Any]]) -> None:
-    rows = list(rows)
-    first_keys = list(rows[0].keys()) if rows else []
-    extra_keys, seen = [], set(first_keys)
-    for r in rows[1:]:
-        for k in r.keys():
-            if k not in seen:
-                seen.add(k)
-                extra_keys.append(k)
-    cols = first_keys + extra_keys
+    # URL-like or anything else: stringify
+    try:
+        return str(obj)
+    except Exception:
+        return repr(obj)
 
-    table = Table()
-    for c in cols:
-        table.add_column(str(c))
-    for r in rows:
-        table.add_row(*[_stringify(r.get(c, "")) for c in cols])
-    console.print(table)
 
-def print_output(result: Any, output: str = "json") -> None:
+def render_output(data: Any, *, output: str, fields: list[str] | None = None, jq: str | None = None):
     """
-    Print result in the requested format.
-    Accepts Pydantic models, dicts, lists – converts via to_plain().
-    Then coerces non-JSON types (e.g., Url) via make_json_safe().
-    """
-    data = to_plain(result)
-    safe = make_json_safe(data)
+    Render data to the console in various output formats.
 
+    Supported output formats:
+        - "json": Pretty-prints the data as JSON.
+        - "yaml": Prints the data as YAML.
+        - "ndjson": Prints each item in a list as a separate JSON line (newline-delimited JSON).
+        - "table": Prints a table if the data is a list of dicts; otherwise, falls back to pretty JSON.
+
+    Parameters:
+        data (Any): The data to render. Can be any Python object; will be normalized to plain types.
+        output (str): The output format. One of "json", "yaml", "ndjson", or "table".
+        fields (list[str], optional): List of fields/columns to display in table output. If None, all fields are shown.
+        jq (str, optional): JMESPath query string to filter or transform the data before rendering.
+
+    Behavior:
+        - If `jq` is provided, applies the JMESPath query to the data.
+        - For "table" output, if the data is a list of dicts, displays as a table; otherwise, falls back to pretty JSON.
+        - For "ndjson", prints each item in a list as a separate JSON line; if not a list, prints the data as a single
+        JSON line.
+        - For "json" and "yaml", prints the data in the respective format.
+
+    """
+    # Normalize to plain Python types first
+    data = _to_plain(data)
+
+    # Optional JMESPath filter
+    if jq:
+        try:
+            data = jmespath.search(jq, data)
+        except Exception as e:
+            _console.print(f"[red]JMESPath error:[/red] {e}\n[red]Query:[/red] {jq}")
+
+    # JSON
     if output == "json":
-        # rich.print_json needs either serializable data=... OR a JSON string.
-        console.print_json(json=json.dumps(safe, ensure_ascii=False))
+        _console.print_json(data=data)
         return
 
+    # YAML
     if output == "yaml":
-        console.print(yaml.safe_dump(safe, sort_keys=False).rstrip())
+        _console.print(yaml.safe_dump(data, sort_keys=False))
         return
 
+    # NDJSON
     if output == "ndjson":
-        if isinstance(safe, Sequence) and not isinstance(safe, (str, bytes)):
-            for item in safe:
-                console.print(json.dumps(make_json_safe(item), ensure_ascii=False))
+        if isinstance(data, list):
+            for row in data:
+                sys.stdout.write(json.dumps(row, ensure_ascii=False) + "\n")
         else:
-            console.print(json.dumps(safe, ensure_ascii=False))
+            sys.stdout.write(json.dumps(data, ensure_ascii=False) + "\n")
         return
 
-    if output == "table":
-        if isinstance(safe, Mapping):
-            _render_kv_table(safe)
-            return
-        if isinstance(safe, Sequence) and safe and all(isinstance(i, Mapping) for i in safe):
-            _render_list_table(safe)
-            return
-        console.print_json(json=json.dumps(safe, ensure_ascii=False))
-        return
-
-    console.print_json(json=json.dumps(safe, ensure_ascii=False))
+    # TABLE (default)
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        cols = fields or list({k for row in data for k in row.keys()})
+        table = Table()
+        for c in cols:
+            table.add_column(c)
+        for row in data:
+            table.add_row(*[str(row.get(c, "")) for c in cols])
+        _console.print(table)
+    else:
+        # fallback to pretty JSON
+        _console.print_json(data=data)

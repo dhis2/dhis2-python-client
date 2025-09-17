@@ -19,5 +19,5 @@ async def test_paging_data_elements_two_pages():
                     ),
                 ]
             )
-            items = await client.list_all_data_elements(fields=["id", "name"], page_size=1)
+            items = await client.list_all_data_elements(fields=["id", "name"], page_size=1, as_dict=False)
             assert [de.id for de in items] == ["de1", "de2"]
