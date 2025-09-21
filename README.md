@@ -30,12 +30,11 @@
 
 ---
 
-## 🤔 Why this client?
+## Key features?
 
 - **Zero boilerplate:** plain `dict` in/out, no models or context managers.
-- **Predictable paging:** iterators yield items, not pages.
+- **Paging:** iterators yield items, not pages.
 - **Logging that helps:** quiet by default; bump to INFO when you need it.
-- **Security-minded defaults:** **Users API is read-only** by design.
 
 ---
 
