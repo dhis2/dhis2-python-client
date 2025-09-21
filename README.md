@@ -12,6 +12,7 @@
 - [Authentication & Settings](#-authentication--settings)
 - [Logging](#-logging)
 - [Paging](#-paging)
+- [Collections: page-by-page iteration](#collections-page-by-page-iteration)
 - [Convenience Methods (Cheatsheet)](#-convenience-methods-cheatsheet)
 - [Examples](#-examples)
   - [Users (read-only)](#users-read-only)
@@ -143,7 +144,59 @@ Example output:
 for ou in client.get_organisation_units(level=2, fields="id,displayName"):
     ...
 ```
+---
 
+## Collections: page-by-page iteration
+
+All collection convenience methods (`get_data_elements`, `get_users`, `get_organisation_units`, `get_data_sets`, …) fetch results **page by page** from DHIS2 until all matching items are returned.  
+
+- ✅ Safe for large DHIS2 servers (does not load everything in one huge response).
+- ✅ Transparent pass-through: you control `page`, `pageSize`, `filter`, `fields`, etc.
+- ❌ These methods do **not** include the `pager` block that DHIS2 returns. Use `client.get(...)` directly if you need that metadata.
+
+### Examples
+
+Iterate over all matching data elements (fetches pages of 50 by default):
+
+```python
+for de in client.get_data_elements(fields="id,displayName"):
+    print(de["id"], de["displayName"])
+```
+
+Materialize in memory (not recommended for huge datasets):
+
+```python
+des = list(client.get_data_elements(fields="id,displayName"))
+print(len(des))  # total number of matching items across all pages
+```
+
+Get paging info (total, page count, etc.) directly from DHIS2:
+
+```python
+raw = client.get("/api/dataElements", params={"page": 1, "pageSize": 50})
+print(raw["pager"]["total"])
+```
+
+### Why page-by-page?
+
+DHIS2 often has tens of thousands of objects. Returning a list by default would load everything into memory and hide the paging behavior. By default, we fetch one page at a time (default `pageSize=50`) and continue until the server reports no more pages. This way you can process items efficiently without running out of memory.
+
+### FAQ
+
+**Why doesn’t `len(client.get_data_elements())` work?**
+Because the method yields items page by page. Wrap it in `list(...)` if you want to force fetching *all* items into memory:
+
+```python
+des = list(client.get_data_elements(fields="id"))
+print(len(des))
+```
+
+Or use the raw API call if you only need counts:
+
+```python
+raw = client.get("/api/dataElements", params={"page": 1, "pageSize": 50})
+print(raw["pager"]["total"])
+```
 ---
 
 ## 🧭 Convenience Methods (Cheatsheet)
