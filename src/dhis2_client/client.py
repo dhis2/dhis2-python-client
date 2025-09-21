@@ -1,5 +1,6 @@
 from typing import Any, Dict, Iterable, Optional
 
+import atexit
 import httpx
 
 from .errors import DHIS2HTTPError
@@ -81,16 +82,20 @@ class DHIS2Client:
         self.retries = int(retries)
         self.verify_ssl = bool(verify_ssl)
 
-        headers: Dict[str, str] = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
+        # Persist auth + token
+        self._auth = (username, password) if (username and password) else None
         if token:
-            headers["Authorization"] = (
+            self._token_header = (
                 token if token.startswith(("Bearer ", "ApiToken ")) else f"ApiToken {token}"
             )
-        self._auth = (username, password) if (username and password) else None
-        self._client = httpx.Client(headers=headers, timeout=self.timeout, verify=self.verify_ssl)
+        else:
+            self._token_header = None
+
+        # Build initial client (auto-open)
+        self._client: Optional[httpx.Client] = self._build_client()
+
+        # Best-effort cleanup at interpreter exit; safe to call multiple times.
+        atexit.register(self.close)
 
         # Register resources
         self._system = System(self)
@@ -100,6 +105,40 @@ class DHIS2Client:
         self._data_sets = DataSets(self)
         self._data_values = DataValues(self)
         self._analytics = Analytics(self)
+
+    # ---------- lifecycle ----------
+
+    def _build_client(self) -> httpx.Client:
+        headers: Dict[str, str] = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        if self._token_header:
+            headers["Authorization"] = self._token_header
+        return httpx.Client(
+            headers=headers,
+            timeout=self.timeout,
+            verify=self.verify_ssl,
+        )
+
+    def _ensure_client(self) -> httpx.Client:
+        """
+        Recreate the httpx.Client if it was closed.
+        This makes client.close() safe mid-process (e.g., notebooks).
+        """
+        if self._client is None:
+            logger.debug("Recreating HTTP client")
+            self._client = self._build_client()
+        return self._client
+
+    def close(self) -> None:
+        """Idempotent close of the underlying HTTP client."""
+        client, self._client = self._client, None
+        if client is not None:
+            try:
+                client.close()
+            except Exception as e:
+                logger.warning("Error during client.close(): %s", e)
 
     # -------------------------
     # Core HTTP (pass-throughs)
@@ -118,7 +157,8 @@ class DHIS2Client:
 
         resp: httpx.Response | None = None
         for attempt in range(self.retries + 1):
-            resp = self._client.request(method, url, params=params, json=json, auth=self._auth)
+            client = self._ensure_client()
+            resp = client.request(method, url, params=params, json=json, auth=self._auth)
             if resp.status_code >= 500 and method.upper() == "GET" and attempt < self.retries:
                 logger.warning(
                     "Retrying %s %s after server error %s (attempt %s)",
