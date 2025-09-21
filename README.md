@@ -1,0 +1,434 @@
+# dhis2-client 🧰📊
+
+> Simple, synchronous DHIS2 Web API client — **dict/JSON only**, Jupyter-friendly (no context managers), **clean paging**, **read-only users**, CRUD for metadata (org units, data elements, data sets), **data values** & **data value sets**, **analytics**, and **minimal logging** by default.
+
+---
+
+## 📚 Table of Contents
+- [Why this client?](#-why-this-client)
+- [Installation](#-installation)
+- [Requirements](#-requirements)
+- [Quickstart](#-quickstart)
+- [Authentication & Settings](#-authentication--settings)
+- [Logging](#-logging)
+- [Paging](#-paging)
+- [Convenience Methods (Cheatsheet)](#-convenience-methods-cheatsheet)
+- [Examples](#-examples)
+  - [Users (read-only)](#users-read-only)
+  - [Organisation Units](#organisation-units)
+  - [Data Elements](#data-elements)
+  - [Data Sets](#data-sets)
+  - [Data Values](#data-values)
+  - [Data Value Sets](#data-value-sets)
+  - [Analytics](#analytics)
+- [Raw API calls](#-raw-api-calls)
+- [Testing](#-testing)
+- [Dev Setup](#-dev-setup)
+- [Integration Tests](#-integration-tests)
+- [Roadmap](#-roadmap)
+- [License](#-license)
+
+---
+
+## 🤔 Why this client?
+
+- **Zero boilerplate:** plain `dict` in/out, no models or context managers.
+- **Predictable paging:** iterators yield items, not pages.
+- **Logging that helps:** quiet by default; bump to INFO when you need it.
+- **Security-minded defaults:** **Users API is read-only** by design.
+
+---
+
+## 📦 Installation
+
+> Requires **Python 3.10+**
+
+```bash
+pip install dhis2-client
+# or, from source
+pip install -e .
+```
+
+---
+
+## 🔧 Requirements
+
+- Python **3.10+**
+- DHIS2 server URL and valid credentials (Basic or token)
+
+---
+
+## ⚡ Quickstart
+
+```python
+from dhis2_client import DHIS2Client
+
+client = DHIS2Client(
+    base_url="http://localhost:8080",
+    username="admin",
+    password="district",  # Basic auth by default
+)
+
+# Iterate users (read-only)
+for u in client.get_users(fields="id,username", order="username:asc"):
+    print(u)
+
+# Fetch all data elements into a list (respecting paging)
+all_des = client.fetch_all("/api/dataElements", params={"fields": "id,displayName"})
+```
+---
+
+## 🔐 Authentication & Settings
+
+You can configure the client directly with kwargs or centrally with a ClientSettings object.
+
+```python
+from dhis2_client import DHIS2Client
+from dhis2_client.settings import ClientSettings
+
+# Recommended: central settings
+cfg = ClientSettings(
+    base_url="http://localhost:8080",
+    username="admin",
+    password="district",
+    log_level="INFO",        # default "WARNING"
+    log_format="json",       # default "json"; use "text" for human-readable
+    log_destination="stdout" # default "stderr"; can also be file path
+)
+
+client = DHIS2Client(settings=cfg)
+info = client.get_system_info()
+print(info["version"])
+```
+Kwargs override settings if both are provided:
+```python
+client = DHIS2Client(settings=cfg, log_level="DEBUG")  # DEBUG takes precedence
+
+```
+---
+
+## 🪵 Logging
+
+- **Default**: JSON logs at WARNING level to stderr.
+- **Configurable**: via ClientSettings or constructor kwargs.
+
+```python
+# JSON (default) logs at INFO to stdout
+cfg = ClientSettings(
+  base_url="http://localhost:8080", 
+  username="admin", 
+  password="district", 
+  log_level="INFO", log_destination="stdout")
+client = DHIS2Client(settings=cfg)
+
+# Human-readable text logs
+client = DHIS2Client(
+  "http://localhost:8080",
+  username="admin", 
+  password="district",
+  log_level="INFO", log_format="text")
+
+# File logging
+client = DHIS2Client("http://localhost:8080",
+                     username="admin", password="district",
+                     log_level="DEBUG", log_destination="/tmp/dhis2_client.log")
+
+```
+
+Example output:
+```json
+{"ts":"2025-09-19T14:20:01+0000","level":"INFO","logger":"dhis2_client","message":"Request GET /api/system/info params=None"}
+```
+
+---
+
+## 📑 Paging
+
+- Default `pageSize=50`.
+- `get_*s()` yield **items** across pages.
+- `fetch_all()` returns a **list** of all items.
+
+```python
+for ou in client.get_organisation_units(level=2, fields="id,displayName"):
+    ...
+```
+
+---
+
+## 🧭 Convenience Methods (Cheatsheet)
+
+### Core (raw API calls)
+```
+get(path, params=None) -> dict
+post(path, json=None) -> dict
+put(path, json=None) -> dict
+delete(path, params=None) -> dict
+list_paged(path, params=None, page_size=None, item_key=None) -> Iterable[dict]
+fetch_all(path, params=None, item_key=None) -> list[dict]
+```
+
+
+### System
+```
+get_system_info() -> dict
+```
+
+### Users (read-only)
+```
+get_users(**filters) -> Iterable[dict]
+get_user(uid, *, fields=None) -> dict
+```
+
+### Organisation Units
+```
+get_organisation_units(**filters) -> Iterable[dict]
+get_org_unit(uid, *, fields=None) -> dict
+create_org_unit(payload) -> dict
+update_org_unit(uid, payload) -> dict
+delete_org_unit(uid) -> dict
+get_org_unit_tree(root_uid=None, levels=None) -> dict
+```
+
+#### GeoJSON
+
+```python
+get_organisation_units_geojson(**params) -> dict
+get_org_unit_geojson(uid, **params) -> dict
+```
+
+### Data Elements
+```
+get_data_elements(**filters) -> Iterable[dict]
+get_data_element(uid, *, fields=None) -> dict
+create_data_element(payload) -> dict
+update_data_element(uid, payload) -> dict
+delete_data_element(uid) -> dict
+```
+
+### Data Sets
+```
+get_data_sets(**filters) -> Iterable[dict]
+get_data_set(uid, *, fields=None) -> dict
+create_data_set(payload) -> dict
+update_data_set(uid, payload) -> dict
+delete_data_set(uid) -> dict
+```
+
+### Data Values
+```
+get_data_value(de, pe, ou, co=None, aoc=None, cc=None, cp=None) -> dict
+set_data_value(de, pe, ou, value, **kwargs) -> dict
+delete_data_value(de, pe, ou, **kwargs) -> dict
+```
+
+### Data Value Sets
+```
+get_data_value_set(params: dict) -> dict
+post_data_value_set(payload: dict) -> dict
+```
+
+### Analytics
+```
+get_analytics(table: str = "analytics", **params) -> dict
+```
+
+---
+
+## 🔎 Examples
+
+### Users (read-only)
+
+```python
+# List users
+for u in client.get_users(fields="id,username", order="username:asc"):
+    print(u)
+
+# Single user
+user = client.get_user("u123", fields="id,username,displayName")
+```
+
+### Organisation Units
+
+```python
+# Iterate OU level 2
+for ou in client.get_organisation_units(level=2, fields="id,displayName"):
+    print(ou)
+
+# Single OU
+ou = client.get_org_unit("ou123", fields="id,displayName")
+
+# Create/Update/Delete OU
+client.create_org_unit({"name": "Clinic A", "shortName": "ClinicA", "openingDate": "2020-01-01"})
+client.update_org_unit("ou123", {"name": "Clinic Alpha"})
+client.delete_org_unit("ou123")
+
+# Tree
+tree = client.get_org_unit_tree(root_uid="ouROOT")
+```
+
+#### GeoJSON
+
+```python
+# Collection as GeoJSON (unpaged FeatureCollection)
+fc = client.get_organisation_units_geojson(level=2, fields="id,displayName,geometry")
+
+# Single org unit as GeoJSON
+feat = client.get_org_unit_geojson("ou123", fields="id,displayName,geometry")
+```
+
+### Data Elements
+
+```python
+# List
+for de in client.get_data_elements(fields="id,displayName", filter=["valueType:eq:INTEGER"]):
+    print(de)
+
+# CRUD
+client.create_data_element({"name": "New DE", "shortName": "NDE", "valueType": "NUMBER"})
+de = client.get_data_element("de123", fields="id,displayName,valueType")
+client.update_data_element("de123", {"valueType": "INTEGER"})
+client.delete_data_element("de123")
+```
+
+### Data Sets
+
+```python
+for ds in client.get_data_sets(fields="id,displayName"):
+    print(ds)
+
+ds = client.get_data_set("ds123", fields="id,displayName")
+client.create_data_set({"name": "My DS", "periodType": "Monthly"})
+client.update_data_set("ds123", {"name": "My DS (Updated)"})
+client.delete_data_set("ds123")
+```
+
+### Data Values
+
+```python
+# Single data value lifecycle
+client.set_data_value(de="de1", pe="202401", ou="ou1", value="42")
+val = client.get_data_value(de="de1", pe="202401", ou="ou1")
+client.delete_data_value(de="de1", pe="202401", ou="ou1")
+```
+
+### Data Value Sets
+
+```python
+# Pull a batch
+dvs = client.get_data_value_set({"dataSet": "ds1", "period": "202401", "orgUnit": "ou1"})
+
+# Push a batch
+client.post_data_value_set({
+  "dataSet": "ds1",
+  "orgUnit": "ou1",
+  "period": "202401",
+  "dataValues": [
+    {"dataElement": "de1", "categoryOptionCombo": "co1", "value": "5"},
+    {"dataElement": "de2", "categoryOptionCombo": "co1", "value": "9"}
+  ]
+})
+```
+
+### Analytics
+
+```python
+pivot = client.get_analytics(
+  dimension=["dx:de1;de2", "pe:LAST_12_MONTHS", "ou:LEVEL-2"],
+  displayProperty="NAME",
+  skipMeta=True,
+)
+```
+---
+
+## 🕳️ Raw API calls
+
+Not every DHIS2 endpoint has a convenience wrapper yet. You can always use the **core methods** to call any path directly:
+
+```python
+# Arbitrary GET
+resp = client.get("/api/indicators", params={"fields": "id,displayName"})
+
+# Single item
+indicator = client.get("/api/indicators/abc123", params={"fields": "id,displayName"})
+
+# Create
+ou = client.post("/api/organisationUnits", json={
+    "name": "Clinic A",
+    "shortName": "ClinicA",
+    "openingDate": "2020-01-01"
+})
+
+# Update
+client.put("/api/dataElements/de123", json={"valueType": "INTEGER"})
+
+# Delete
+client.delete("/api/dataSets/ds123")
+
+# Iterate paged collection
+for de in client.list_paged(
+    "/api/dataElements",
+    params={"fields": "id,displayName"},
+    item_key="dataElements"
+):
+    print(de)
+```
+---
+
+## 🧪 Testing
+
+- Run **unit tests** (mocked; no .env needed):
+
+```bash
+pytest -q
+```
+
+- Lint/format:
+
+```bash
+ruff check .
+ruff format .
+```
+
+---
+
+## 🧑‍💻 Dev Setup
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Includes: `pytest`, `ruff`, `respx`, `python-dotenv`.
+
+---
+
+## 🔌 Integration Tests
+
+Read-only integration tests (if you have credentials):
+
+```bash
+export DHIS2_BASE_URL="http://localhost:8080"
+export DHIS2_USERNAME="admin"
+export DHIS2_PASSWORD="district"
+pytest -m integration -q
+```
+
+Destructive tests (opt-in; **be careful**):
+
+```bash
+export DHIS2_ALLOW_MUTATIONS=true
+pytest -m integration -q tests/integration/test_live_mutations.py
+```
+
+---
+
+## 🗺️ Roadmap
+
+- Stabilize core API and paging
+- Optional async & CLI (later)
+- More helpers (e.g., file resources, indicators)
+
+---
+
+## 🪪 License
+
+BSD-3-Clause

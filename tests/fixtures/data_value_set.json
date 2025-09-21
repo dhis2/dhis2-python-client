@@ -1,0 +1,21 @@
+{
+  "dataSet": "DataSet123",
+  "completeDate": "2024-01-31",
+  "period": "202401",
+  "orgUnit": "OrgUnit123",
+  "attributeOptionCombo": "AttrOptCombo123",
+  "dataValues": [
+    {
+      "dataElement": "aBc123XyZ",
+      "categoryOptionCombo": "CatOptCombo123",
+      "attributeOptionCombo": "AttrOptCombo123",
+      "value": "42",
+      "comment": "Reported manually"
+    },
+    {
+      "dataElement": "dEf456UvW",
+      "categoryOptionCombo": "CatOptCombo456",
+      "value": "13"
+    }
+  ]
+}

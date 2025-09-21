@@ -1,0 +1,55 @@
+{
+  "organisationUnits": [
+    {
+      "id": "OuRoot00001",
+      "name": "Test Root OU",
+      "shortName": "RootOU",
+      "openingDate": "2020-01-01"
+    },
+    {
+      "id": "OuChild0001",
+      "name": "Test Clinic A",
+      "shortName": "ClinicA",
+      "openingDate": "2020-01-01",
+      "parent": { "id": "OuRoot00001" }
+    }
+  ],
+  "dataElements": [
+    {
+      "id": "DeElem00001",
+      "name": "Test OPD Visits",
+      "shortName": "OPD",
+      "domainType": "AGGREGATE",
+      "valueType": "NUMBER",
+      "aggregationType": "SUM",
+      "categoryCombo": { "id": "bjDvmb4bfuf" }
+    },
+    {
+      "id": "DeElem00002",
+      "name": "Test Deliveries",
+      "shortName": "DELIV",
+      "domainType": "AGGREGATE",
+      "valueType": "NUMBER",
+      "aggregationType": "SUM",
+      "categoryCombo": { "id": "bjDvmb4bfuf" }
+    }
+  ],
+  "dataSets": [
+    {
+      "id": "DsMonth0001",
+      "name": "Test Monthly DS",
+      "shortName": "T-DS",
+      "periodType": "Monthly",
+      "openFuturePeriods": 0,
+      "expiryDays": 0,
+      "timelyDays": 0,
+      "dataSetElements": [
+        { "dataElement": { "id": "DeElem00001" } },
+        { "dataElement": { "id": "DeElem00002" } }
+      ],
+      "organisationUnits": [
+        { "id": "OuChild0001" }
+      ]
+    }
+  ]
+}
