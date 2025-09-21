@@ -30,14 +30,6 @@
 
 ---
 
-## Key features?
-
-- **Zero boilerplate:** plain `dict` in/out, no models or context managers.
-- **Paging:** iterators yield items, not pages.
-- **Logging that helps:** quiet by default; bump to INFO when you need it.
-
----
-
 ## 📦 Installation
 
 > Requires **Python 3.10+**
