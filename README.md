@@ -1,20 +1,20 @@
-# dhis2-client 🧰📊
+# dhis2-client
 
 > Simple, synchronous DHIS2 Web API client — **dict/JSON only**, Jupyter-friendly (no context managers), **clean paging**, **read-only users**, CRUD for metadata (org units, data elements, data sets), **data values** & **data value sets**, **analytics**, and **minimal logging** by default.
 
 ---
 
-## 📚 Table of Contents
-- [Why this client?](#-why-this-client)
-- [Installation](#-installation)
-- [Requirements](#-requirements)
-- [Quickstart](#-quickstart)
-- [Authentication & Settings](#-authentication--settings)
-- [Logging](#-logging)
-- [Paging](#-paging)
+## Table of Contents
+- [Why this client?](#why-this-client)
+- [Installation](#installation)
+- [Requirements](#requirements)
+- [Quickstart](#quickstart)
+- [Authentication & Settings](#authentication--settings)
+- [Logging](#logging)
+- [Paging](#paging)
 - [Collections: page-by-page iteration](#collections-page-by-page-iteration)
-- [Convenience Methods (Cheatsheet)](#-convenience-methods-cheatsheet)
-- [Examples](#-examples)
+- [Convenience Methods](#convenience-methods)
+- [Examples](#examples)
   - [Users (read-only)](#users-read-only)
   - [Organisation Units](#organisation-units)
   - [Data Elements](#data-elements)
@@ -22,16 +22,31 @@
   - [Data Values](#data-values)
   - [Data Value Sets](#data-value-sets)
   - [Analytics](#analytics)
-- [Raw API calls](#-raw-api-calls)
-- [Testing](#-testing)
-- [Dev Setup](#-dev-setup)
-- [Integration Tests](#-integration-tests)
-- [Roadmap](#-roadmap)
-- [License](#-license)
+- [Raw API calls](#raw-api-calls)
+- [Testing](#testing)
+- [Dev Setup](#dev-setup)
+- [Integration Tests](#integration-tests)
+- [Roadmap](#roadmap)
+- [License](#license)
 
 ---
 
-## 📦 Installation
+## Why this client?
+
+DHIS2 is one of the most widely used health information platforms worldwide, and Python is a popular choice in data science, research, and integration workflows. Bringing the two together makes it easier to build analytics, integrations, and automation around DHIS2 data.
+
+This client provides a **lightweight and simple** way to work with the DHIS2 Web API:
+
+- Always returns plain Python `dict` / JSON objects — no custom models or ORM layers.  
+- Handles **paging** cleanly, so you can iterate over large DHIS2 collections without surprises.  
+- Offers **convenience methods** for common entities (users, organisation units, data elements, data sets, data values, analytics) while keeping full access to the raw API.  
+- Keeps setup minimal — synchronous, Jupyter-friendly, and easy to configure.  
+
+In short, it helps Python developers tap into the DHIS2 ecosystem with as little friction as possible.
+
+---
+
+## Installation
 
 > Requires **Python 3.10+**
 
@@ -43,14 +58,14 @@ pip install -e .
 
 ---
 
-## 🔧 Requirements
+## Requirements
 
 - Python **3.10+**
 - DHIS2 server URL and valid credentials (Basic or token)
 
 ---
 
-## ⚡ Quickstart
+## Quickstart
 
 ```python
 from dhis2_client import DHIS2Client
@@ -70,7 +85,7 @@ all_des = client.fetch_all("/api/dataElements", params={"fields": "id,displayNam
 ```
 ---
 
-## 🔐 Authentication & Settings
+## Authentication & Settings
 
 You can configure the client directly with kwargs or centrally with a ClientSettings object.
 
@@ -99,7 +114,7 @@ client = DHIS2Client(settings=cfg, log_level="DEBUG")  # DEBUG takes precedence
 ```
 ---
 
-## 🪵 Logging
+## Logging
 
 - **Default**: JSON logs at WARNING level to stderr.
 - **Configurable**: via ClientSettings or constructor kwargs.
@@ -134,7 +149,7 @@ Example output:
 
 ---
 
-## 📑 Paging
+## Paging
 
 - Default `pageSize=50`.
 - `get_*s()` yield **items** across pages.
@@ -177,29 +192,9 @@ raw = client.get("/api/dataElements", params={"page": 1, "pageSize": 50})
 print(raw["pager"]["total"])
 ```
 
-### Why page-by-page?
-
-DHIS2 often has tens of thousands of objects. Returning a list by default would load everything into memory and hide the paging behavior. By default, we fetch one page at a time (default `pageSize=50`) and continue until the server reports no more pages. This way you can process items efficiently without running out of memory.
-
-### FAQ
-
-**Why doesn’t `len(client.get_data_elements())` work?**
-Because the method yields items page by page. Wrap it in `list(...)` if you want to force fetching *all* items into memory:
-
-```python
-des = list(client.get_data_elements(fields="id"))
-print(len(des))
-```
-
-Or use the raw API call if you only need counts:
-
-```python
-raw = client.get("/api/dataElements", params={"page": 1, "pageSize": 50})
-print(raw["pager"]["total"])
-```
 ---
 
-## 🧭 Convenience Methods (Cheatsheet)
+## Convenience Methods
 
 ### Core (raw API calls)
 ```
@@ -210,7 +205,6 @@ delete(path, params=None) -> dict
 list_paged(path, params=None, page_size=None, item_key=None) -> Iterable[dict]
 fetch_all(path, params=None, item_key=None) -> list[dict]
 ```
-
 
 ### System
 ```
@@ -278,7 +272,7 @@ get_analytics(table: str = "analytics", **params) -> dict
 
 ---
 
-## 🔎 Examples
+## Examples
 
 ### Users (read-only)
 
@@ -382,9 +376,10 @@ pivot = client.get_analytics(
   skipMeta=True,
 )
 ```
+
 ---
 
-## 🕳️ Raw API calls
+## Raw API calls
 
 Not every DHIS2 endpoint has a convenience wrapper yet. You can always use the **core methods** to call any path directly:
 
@@ -416,9 +411,10 @@ for de in client.list_paged(
 ):
     print(de)
 ```
+
 ---
 
-## 🧪 Testing
+## Testing
 
 - Run **unit tests** (mocked; no .env needed):
 
@@ -435,7 +431,7 @@ ruff format .
 
 ---
 
-## 🧑‍💻 Dev Setup
+## Dev Setup
 
 ```bash
 pip install -r requirements-dev.txt
@@ -445,7 +441,7 @@ Includes: `pytest`, `ruff`, `respx`, `python-dotenv`.
 
 ---
 
-## 🔌 Integration Tests
+## Integration Tests
 
 Read-only integration tests (if you have credentials):
 
@@ -465,7 +461,7 @@ pytest -m integration -q tests/integration/test_live_mutations.py
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 - Stabilize core API and paging
 - Optional async & CLI (later)
@@ -473,6 +469,6 @@ pytest -m integration -q tests/integration/test_live_mutations.py
 
 ---
 
-## 🪪 License
+## License
 
 BSD-3-Clause
