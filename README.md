@@ -42,8 +42,6 @@ This client provides a **lightweight and simple** way to work with the DHIS2 Web
 - Offers **convenience methods** for common entities (users, organisation units, data elements, data sets, data values, analytics) while keeping full access to the raw API.  
 - Keeps setup minimal — synchronous, Jupyter-friendly, and easy to configure.  
 
-In short, it helps Python developers tap into the DHIS2 ecosystem with as little friction as possible.
-
 ---
 
 ## Installation
