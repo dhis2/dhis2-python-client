@@ -22,6 +22,11 @@ class Resource:
     def _delete(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._c.delete(path, params=params)
 
+    def _patch(
+        self, path: str, *, params: Optional[Dict[str, Any]] = None, json: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        return self._c.patch(path, params=params, json=json)
+
     def _list(
         self,
         path: str,

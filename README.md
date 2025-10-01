@@ -5,29 +5,47 @@
 ---
 
 ## Table of Contents
-- [Why this client?](#why-this-client)
-- [Installation](#installation)
-- [Requirements](#requirements)
-- [Quickstart](#quickstart)
-- [Authentication & Settings](#authentication--settings)
-- [Logging](#logging)
-- [Paging](#paging)
-- [Collections: page-by-page iteration](#collections-page-by-page-iteration)
-- [Convenience Methods](#convenience-methods)
-- [Examples](#examples)
-  - [Users (read-only)](#users-read-only)
-  - [Organisation Units](#organisation-units)
-  - [Data Elements](#data-elements)
-  - [Data Sets](#data-sets)
-  - [Data Values](#data-values)
-  - [Data Value Sets](#data-value-sets)
-  - [Analytics](#analytics)
-- [Raw API calls](#raw-api-calls)
-- [Testing](#testing)
-- [Dev Setup](#dev-setup)
-- [Integration Tests](#integration-tests)
-- [Roadmap](#roadmap)
-- [License](#license)
+- [dhis2-client](#dhis2-client)
+  - [Table of Contents](#table-of-contents)
+  - [Why this client?](#why-this-client)
+  - [Installation](#installation)
+  - [Requirements](#requirements)
+  - [Quickstart](#quickstart)
+  - [Authentication \& Settings](#authentication--settings)
+  - [Logging](#logging)
+  - [Paging](#paging)
+  - [Collections: page-by-page iteration](#collections-page-by-page-iteration)
+    - [Examples](#examples)
+  - [Sharing](#sharing)
+    - [Examples](#examples-1)
+  - [User OrgUnit Scope](#user-orgunit-scope)
+    - [Examples](#examples-2)
+  - [Convenience Methods](#convenience-methods)
+    - [Core (raw API calls)](#core-raw-api-calls)
+    - [System](#system)
+    - [Users (read-only)](#users-read-only)
+    - [Organisation Units](#organisation-units)
+      - [GeoJSON](#geojson)
+    - [Data Elements](#data-elements)
+    - [Data Sets](#data-sets)
+    - [Data Values](#data-values)
+    - [Data Value Sets](#data-value-sets)
+    - [Analytics](#analytics)
+  - [Examples](#examples-3)
+    - [Users (read-only)](#users-read-only-1)
+    - [Organisation Units](#organisation-units-1)
+      - [GeoJSON](#geojson-1)
+    - [Data Elements](#data-elements-1)
+    - [Data Sets](#data-sets-1)
+    - [Data Values](#data-values-1)
+    - [Data Value Sets](#data-value-sets-1)
+    - [Analytics](#analytics-1)
+  - [Raw API calls](#raw-api-calls)
+  - [Testing](#testing)
+  - [Dev Setup](#dev-setup)
+  - [Integration Tests](#integration-tests)
+  - [Roadmap](#roadmap)
+  - [License](#license)
 
 ---
 
@@ -190,6 +208,59 @@ raw = client.get("/api/dataElements", params={"page": 1, "pageSize": 50})
 print(raw["pager"]["total"])
 ```
 
+---
+
+## Sharing
+
+This client mirrors DHIS2’s common default posture where **Public access** is
+“Can edit and view metadata” (metadata read+write). Access masks:
+
+- `DATA_READ`  = `rwr-----`   (metadata rw, data r)
+- `DATA_WRITE` = `rwrw----`   (metadata rw, data rw — typical for capture)
+- `META_READ`  = `rw-------`  (metadata rw, no data)
+- `META_WRITE` = `rw-------`  (same string, alias for clarity)
+- `NO_ACCESS`  = `--------`   (deny all)
+
+### Examples
+
+```python
+# Grant *yourself* data write (plus metadata rw baseline) on a Program
+client.grant_self_access(object_type="program", object_id="PrA123", access=DATA_WRITE)  # "rwrw----"
+
+# Change only public access → set to metadata rw (rw-------)
+client.set_public_access(object_type="dashboard", object_id="db789", public_access=META_WRITE)
+
+# Grant user data set write access
+client.set_dataset_data_write("Ds1", user_ids=["u1"], user_group_ids=["gEditors"])
+
+# Stricter security: remove all public access
+client.set_dataset_data_write("Ds2", public_access=NO_ACCESS)  # "--------"
+```
+
+---
+
+## User OrgUnit Scope
+
+Methods are operation-specific; kwargs are just the **scopes**:
+
+- `capture` → `/organisationUnits`
+- `view`    → `/dataViewOrganisationUnits`
+- `tei`     → `/teiSearchOrganisationUnits`
+
+### Examples
+
+```python
+# Current user
+client.add_my_org_unit_scopes(capture=["ouCapA", "ouCapB"], view=["ouViewX"])      # append (dedupes)
+client.replace_my_org_unit_scopes(tei=["ouSearch1", "ouSearch2"])                  # set exactly
+client.remove_my_org_unit_scopes(capture=["ouCapB"], tei=["ouSearch2"])            # remove by ID
+
+# Another user (UID)
+uid = "u123456"
+client.add_user_org_unit_scopes(uid, capture=["ouA"], view=["ouB"])
+client.replace_user_org_unit_scopes(uid, capture=["ouOnly"])
+client.remove_user_org_unit_scopes(uid, tei=["ouOldSearch"])
+```
 ---
 
 ## Convenience Methods

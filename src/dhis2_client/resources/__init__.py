@@ -5,6 +5,7 @@ from .data_values import DataValues
 from .organisation_units import OrganisationUnits
 from .system import System
 from .users import Users
+from .sharing import Sharing
 
 __all__ = [
     "Users",
@@ -14,4 +15,5 @@ __all__ = [
     "DataValues",
     "Analytics",
     "System",
+    "Sharing",
 ]
