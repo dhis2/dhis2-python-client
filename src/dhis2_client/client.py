@@ -13,6 +13,7 @@ from .resources import (
     DataValues,
     OrganisationUnits,
     Users,
+    Sharing,
 )
 from .resources.system import System
 from .settings import ClientSettings
@@ -105,6 +106,7 @@ class DHIS2Client:
         self._data_sets = DataSets(self)
         self._data_values = DataValues(self)
         self._analytics = Analytics(self)
+        self._sharing = Sharing(self)
 
     # ---------- lifecycle ----------
 
@@ -151,6 +153,7 @@ class DHIS2Client:
         *,
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         url = build_url(self.base_url, path)
         logger.info("Request %s %s params=%s", method, path, params)
@@ -158,7 +161,7 @@ class DHIS2Client:
         resp: httpx.Response | None = None
         for attempt in range(self.retries + 1):
             client = self._ensure_client()
-            resp = client.request(method, url, params=params, json=json, auth=self._auth)
+            resp = client.request(method, url, params=params, json=json, auth=self._auth, headers=headers)
             if resp.status_code >= 500 and method.upper() == "GET" and attempt < self.retries:
                 logger.warning(
                     "Retrying %s %s after server error %s (attempt %s)",
@@ -199,6 +202,17 @@ class DHIS2Client:
         self, path: str, *, params: Dict[str, Any] | None = None, json: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
         return self._request("PUT", path, params=params, json=json)
+
+    def patch(
+        self, path: str, *, params: dict | None = None, json: dict | list | None = None
+    ) -> dict:
+        return self._request(
+            "PATCH",
+            path,
+            params=params,
+            json=json,
+            headers={"Content-Type": "application/json-patch+json"},
+        )
 
     def delete(self, path: str, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
         return self._request("DELETE", path, params=params)
@@ -251,12 +265,34 @@ class DHIS2Client:
     def get_system_info(self) -> Dict[str, Any]:
         return self._system.info()
 
-    # Users (read-only)
+    # Users (read-only + OU scope updater)
+    def get_current_user(self, *, fields: str | None = None) -> dict:
+        params = {"fields": fields} if fields else None
+        return self.get("/api/me", params=params)
+
     def get_users(self, **params):
         return self._users.list(**params)
 
     def get_user(self, uid: str, *, fields: str | None = None) -> Dict[str, Any]:
         return self._users.get(uid, fields=fields)
+
+    def add_user_org_unit_scopes(self, uid: str, **kwargs) -> dict:
+        return self._users.add_user_org_unit_scopes(uid, **kwargs)
+
+    def replace_user_org_unit_scopes(self, uid: str, **kwargs) -> dict:
+        return self._users.replace_user_org_unit_scopes(uid, **kwargs)
+
+    def remove_user_org_unit_scopes(self, uid: str, **kwargs) -> dict:
+        return self._users.remove_user_org_unit_scopes(uid, **kwargs)
+
+    def add_my_org_unit_scopes(self, **kwargs) -> dict:
+        return self._users.add_my_org_unit_scopes(**kwargs)
+
+    def replace_my_org_unit_scopes(self, **kwargs) -> dict:
+        return self._users.replace_my_org_unit_scopes(**kwargs)
+
+    def remove_my_org_unit_scopes(self, **kwargs) -> dict:
+        return self._users.remove_my_org_unit_scopes(**kwargs)
 
     # Organisation Units
     def get_organisation_units(self, **params):
@@ -338,3 +374,41 @@ class DHIS2Client:
     # Analytics
     def get_analytics(self, *, table: str = "analytics", **params) -> Dict[str, Any]:
         return self._analytics.get(table=table, **params)
+
+    # Sharing
+    def get_sharing(self, *, object_type: str, object_id: str) -> dict:
+        return self._sharing.get(object_type=object_type, object_id=object_id)
+
+    def set_sharing(self, *, object_type: str, object_id: str, **kwargs) -> dict:
+        return self._sharing.set(object_type=object_type, object_id=object_id, **kwargs)
+
+    def grant_self_access(self, *, object_type: str, object_id: str, access: str = "r-rw----") -> dict:
+        return self._sharing.grant_self_access(object_type=object_type, object_id=object_id, access=access)
+
+    def set_public_access(self, *, object_type: str, object_id: str, public_access: str) -> dict:
+        return self._sharing.set_public_access(object_type=object_type, object_id=object_id, public_access=public_access)
+
+    def grant_access(
+        self,
+        *,
+        object_type: str,
+        object_id: str,
+        user_ids: Optional[Iterable[str]] = None,
+        user_group_ids: Optional[Iterable[str]] = None,
+        access: str = "r-rw----",
+        keep_public: bool = True,
+    ) -> dict:
+        return self._sharing.grant_access(
+            object_type=object_type,
+            object_id=object_id,
+            user_ids=user_ids,
+            user_group_ids=user_group_ids,
+            access=access,
+            keep_public=keep_public,
+        )
+
+    def grant_self_data_write_on_dataset(self, dataset_id: str, access: str = "rwrw----") -> dict:
+        return self._sharing.grant_self_data_write_on_dataset(dataset_id, access=access)
+
+    def set_dataset_data_write(self, dataset_id: str, **kwargs) -> dict:
+        return self._sharing.set_dataset_data_write(dataset_id, **kwargs)
