@@ -13,11 +13,11 @@ class Resource:
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._c.get(path, params=params)
 
-    def _post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self._c.post(path, json=json)
+    def _post(self, path: str, params: Optional[Dict[str, Any]] = None, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return self._c.post(path, params=params, json=json)
 
-    def _put(self, path: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self._c.put(path, json=json)
+    def _put(self, path: str, params: Optional[Dict[str, Any]] = None, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return self._c.put(path, params=params, json=json)
 
     def _delete(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._c.delete(path, params=params)

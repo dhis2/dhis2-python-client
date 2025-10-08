@@ -24,7 +24,7 @@ def test_get_organisation_units_geojson(respx_mock):
     )
 
     c = DHIS2Client(BASE)
-    got = c.get_organisation_units_geojson(level=2, fields="id,displayName,geometry")
+    got = c.get_org_units_geojson(level=2, fields="id,displayName,geometry")
 
     assert got["type"] == "FeatureCollection"
     assert got["features"][0]["properties"]["id"] == "ou1"

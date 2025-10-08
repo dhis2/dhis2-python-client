@@ -1,9 +1,27 @@
 import httpx
 import pytest
+import json
 
 from dhis2_client import DHIS2Client
 
 BASE = "http://test"
+
+
+def _body(req: httpx.Request) -> dict:
+    """
+    Robustly parse JSON body from an httpx.Request across versions.
+    """
+    # In some httpx versions, .read() is needed to populate .content
+    if hasattr(req, "read"):
+        try:
+            req.read()
+        except Exception:
+            pass
+    raw = getattr(req, "content", b"") or b"{}"
+    try:
+        return json.loads(raw.decode("utf-8") or "{}")
+    except Exception as e:
+        raise AssertionError(f"Failed to parse request JSON: {e}; RAW={raw!r}") from e
 
 
 @pytest.mark.unit
@@ -27,9 +45,14 @@ def test_grant_self_access_merges_current(respx_mock):
     def post_sharing(req: httpx.Request) -> httpx.Response:
         assert req.url.params.get("type") == "program"
         assert req.url.params.get("id") == "PrA"
-        obj = req.json()["object"]
+
+        body = _body(req)
+        assert "object" in body
+        obj = body["object"]
+
         # public access unchanged
         assert obj["publicAccess"] == "rw-------"
+
         # merged users includes me123 at DATA_WRITE and keeps u1 at DATA_READ
         users = sorted(obj["userAccesses"], key=lambda x: x["id"])
         assert users == [
@@ -39,6 +62,7 @@ def test_grant_self_access_merges_current(respx_mock):
             {"id": "u1", "access": "rwr-----"},
             {"id": "me123", "access": "rwrw----"},
         ]
+
         # groups preserved
         assert obj["userGroupAccesses"] == [{"id": "g1", "access": "rw-------"}]
         return httpx.Response(200, json={"status": "OK"})
@@ -69,7 +93,10 @@ def test_set_public_access_keeps_users_groups(respx_mock):
     def post_sharing(req: httpx.Request) -> httpx.Response:
         assert req.url.params.get("type") == "dashboard"
         assert req.url.params.get("id") == "db1"
-        obj = req.json()["object"]
+
+        body = _body(req)
+        obj = body["object"]
+
         # publicAccess explicitly set to META_WRITE
         assert obj["publicAccess"] == "rw-------"
         # users/groups preserved
@@ -103,7 +130,10 @@ def test_grant_access_bulk_merge_and_public_toggle(respx_mock):
     def post_sharing(req: httpx.Request) -> httpx.Response:
         assert req.url.params.get("type") == "dataElement"
         assert req.url.params.get("id") == "deX"
-        obj = req.json()["object"]
+
+        body = _body(req)
+        obj = body["object"]
+
         # keep_public=False => remove public access
         assert obj["publicAccess"] == "--------"
         users = sorted(obj["userAccesses"], key=lambda x: x["id"])
@@ -152,7 +182,10 @@ def test_set_dataset_data_write_merges(respx_mock):
     def post_sharing(req: httpx.Request) -> httpx.Response:
         assert req.url.params.get("type") == "dataSet"
         assert req.url.params.get("id") == "Ds1"
-        obj = req.json()["object"]
+
+        body = _body(req)
+        obj = body["object"]
+
         # publicAccess stays as given by call default (META_WRITE) unless overridden
         assert obj["publicAccess"] == "rw-------"
         users = sorted(obj["userAccesses"], key=lambda x: x["id"])

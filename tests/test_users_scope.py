@@ -1,10 +1,28 @@
 import httpx
 import pytest
+import json
 
 from dhis2_client import DHIS2Client
 
 BASE = "http://test"
 JSON_PATCH = "application/json-patch+json"
+
+
+def _body(req: httpx.Request):
+    """
+    Robustly parse JSON body from an httpx.Request across httpx/respx versions.
+    """
+    # Some httpx versions need read() to materialize .content
+    if hasattr(req, "read"):
+        try:
+            req.read()
+        except Exception:
+            pass
+    raw = getattr(req, "content", b"") or b"{}"
+    try:
+        return json.loads(raw.decode("utf-8") or "{}")
+    except Exception as e:
+        raise AssertionError(f"Failed to parse request JSON: {e}; RAW={raw!r}") from e
 
 
 @pytest.mark.unit
@@ -25,8 +43,9 @@ def test_add_user_org_unit_scopes_dedupe_and_header(respx_mock):
 
     def patch_user(req: httpx.Request) -> httpx.Response:
         assert req.headers.get("Content-Type") == JSON_PATCH
+        body = _body(req)
         # We add capture=["A","B"] and view=["V1"]; dedupe removes A
-        assert req.json() == [
+        assert body == [
             {"op": "add", "path": "/organisationUnits/-", "value": {"id": "B"}},
             {"op": "add", "path": "/dataViewOrganisationUnits/-", "value": {"id": "V1"}},
         ]
@@ -45,7 +64,8 @@ def test_replace_user_org_unit_scopes_capture_only(respx_mock):
 
     def patch_user(req: httpx.Request) -> httpx.Response:
         assert req.headers.get("Content-Type") == JSON_PATCH
-        assert req.json() == [
+        body = _body(req)
+        assert body == [
             {"op": "replace", "path": "/organisationUnits", "value": [{"id": "X"}, {"id": "Y"}]}
         ]
         return httpx.Response(200, json={"httpStatus": "OK"})
@@ -74,8 +94,9 @@ def test_remove_user_org_unit_scopes_read_filter_replace(respx_mock):
 
     def patch_user(req: httpx.Request) -> httpx.Response:
         assert req.headers.get("Content-Type") == JSON_PATCH
+        body = _body(req)
         # remove capture=["B"], tei=["T2"]; view untouched
-        assert req.json() == [
+        assert body == [
             {"op": "replace", "path": "/organisationUnits", "value": [{"id": "A"}, {"id": "C"}]},
             {"op": "replace", "path": "/teiSearchOrganisationUnits", "value": [{"id": "T1"}]},
         ]
@@ -103,7 +124,8 @@ def test_add_my_org_unit_scopes_uses_api_me(respx_mock):
     def patch_me(req: httpx.Request) -> httpx.Response:
         assert req.url.path == "/api/users/Ume"
         assert req.headers.get("Content-Type") == JSON_PATCH
-        assert req.json() == [
+        body = _body(req)
+        assert body == [
             {"op": "add", "path": "/organisationUnits/-", "value": {"id": "A"}},
             {"op": "add", "path": "/teiSearchOrganisationUnits/-", "value": {"id": "T1"}},
         ]

@@ -17,7 +17,7 @@ from .resources import (
 )
 from .resources.system import System
 from .settings import ClientSettings
-from .utils import build_url
+from .utils.utils import build_url
 
 
 class DHIS2Client:
@@ -315,11 +315,21 @@ class DHIS2Client:
     ) -> Dict[str, Any]:
         return self._org_units.tree(root_uid=root_uid, levels=levels)
 
-    def get_organisation_units_geojson(self, **params) -> Dict[str, Any]:
+    # GeoJSON
+    def get_org_units_geojson(self, **params) -> dict:
         return self._org_units.geojson(**params)
 
-    def get_org_unit_geojson(self, uid: str, **params) -> Dict[str, Any]:
+    def get_org_unit_geojson(self, uid: str, **params) -> dict:
         return self._org_units.geojson_one(uid, **params)
+
+    def get_org_units_geojson_by_level(self, level: int, **params) -> dict:
+        return self._org_units.geojson_by_level(level, **params)
+
+    def get_org_unit_children_geojson(self, parent_uid: str, **params) -> dict:
+        return self._org_units.geojson_children(parent_uid, **params)
+
+    def get_org_unit_subtree_geojson(self, root_uid: str, **params) -> dict:
+        return self._org_units.geojson_subtree(root_uid, **params)
 
     # Data Elements
     def get_data_elements(self, **params):
@@ -374,6 +384,9 @@ class DHIS2Client:
     # Analytics
     def get_analytics(self, *, table: str = "analytics", **params) -> Dict[str, Any]:
         return self._analytics.get(table=table, **params)
+
+    def analytics_latest_period_for_level(self, de_uid: str, level: int) -> Dict[str, Any]:
+        return self._analytics.latest_period_for_level(de_uid, level)
 
     # Sharing
     def get_sharing(self, *, object_type: str, object_id: str) -> dict:
