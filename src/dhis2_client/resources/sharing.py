@@ -66,7 +66,7 @@ class Sharing(Resource):
         body: Dict[str, Any],
     ) -> Dict[str, Any]:
         # NOTE: base.Resource._post doesn't accept params; call client directly.
-        return self._c.post("/api/sharing", params={"type": object_type, "id": object_id}, json=body)
+        return self._post("/api/sharing", params={"type": object_type, "id": object_id}, json=body)
 
     # ---------- Merge helpers (safe) ----------
 

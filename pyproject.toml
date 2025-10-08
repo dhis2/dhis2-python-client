@@ -12,6 +12,7 @@ license = { text = "BSD-3-Clause" }
 authors = [{ name = "HISP UiO" }]
 dependencies = [
     "httpx>=0.27",
+    "convertdate>=2.4",
 ]
 
 [project.optional-dependencies]
