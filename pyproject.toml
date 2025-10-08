@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dhis2-client"
-version = "0.2.0"
+version = "0.3.0"
 description = "Synchronous DHIS2 Web API client: dict/JSON in–out, logging, paging, and core resources."
 readme = "README.md"
 requires-python = ">=3.10"
