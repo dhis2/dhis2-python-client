@@ -76,11 +76,6 @@ class Analytics(Resource):
             )
 
         period_type = unique_pts[0]
-        if period_type not in {"MONTHLY", "QUARTERLY", "YEARLY"}:
-            raise ValueError(
-                f"Unsupported periodType '{period_type}'. "
-                "Supported here: MONTHLY, QUARTERLY, YEARLY."
-            )
 
         # --- all orgUnits at requested level ---
         ous = self._get(
