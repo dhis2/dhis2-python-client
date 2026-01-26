@@ -1,43 +1,42 @@
 import os
-
 import pytest
-
-from dhis2_client import DHIS2Client
-from dhis2_client.settings import ClientSettings
 
 pytestmark = pytest.mark.integration
 
-BASE_URL = os.environ.get("DHIS2_BASE_URL")
-USERNAME = os.environ.get("DHIS2_USERNAME")
-PASSWORD = os.environ.get("DHIS2_PASSWORD")
-TOKEN = os.environ.get("DHIS2_TOKEN")
-
-OU_CHILD = os.environ.get("TEST_OU_CHILD", "OuChild0001")
-DS_ID = os.environ.get("TEST_DS_ID", "DsMonth0001")
+OU_CHILD = os.environ.get("TEST_OU_CHILD")  # optional
+DS_ID = os.environ.get("TEST_DS_ID")        # optional
 
 
-@pytest.mark.skipif(not BASE_URL, reason="DHIS2_BASE_URL not set")
-def test_system_info_and_reads():
-    cfg = ClientSettings(
-        base_url=BASE_URL,
-        username=USERNAME if not TOKEN else None,
-        password=PASSWORD if not TOKEN else None,
-        token=TOKEN,
-        log_level="INFO",
-        log_destination="stdout",
-    )
-    c = DHIS2Client(settings=cfg)
+def _first_id(resp: dict, key: str) -> str | None:
+    items = resp.get(key) or []
+    if items and isinstance(items[0], dict):
+        return items[0].get("id")
+    return None
+
+
+def test_system_info_and_reads(live_client):
+    c = live_client
 
     info = c.get_system_info()
     assert "version" in info
 
-    # Read a few users (may be empty)
+    # users (just ensure it works)
     _ = list(c.get_users(fields="id,username", pageSize=3))
 
-    # Read back org unit (if seeded)
-    ou = c.get_org_unit(OU_CHILD, fields="id,displayName")
-    assert ou.get("id") == OU_CHILD or ou.get("id") is None
+    # org unit: use TEST_OU_CHILD if supplied, else pick first level-1 OU if any
+    ou_id = OU_CHILD
+    if not ou_id:
+        r = c.get("/api/organisationUnits", params={"fields": "id", "pageSize": 1})
+        ou_id = _first_id(r, "organisationUnits")
+    if ou_id:
+        ou = c.get_org_unit(ou_id, fields="id,displayName")
+        assert ou.get("id") == ou_id
 
-    # Read dataset (if seeded)
-    ds = c.get_data_set(DS_ID, fields="id,displayName,periodType")
-    assert ds.get("periodType") in (None, "Monthly")
+    # dataset: use TEST_DS_ID if supplied, else pick first dataset if any
+    ds_id = DS_ID
+    if not ds_id:
+        r = c.get("/api/dataSets", params={"fields": "id", "pageSize": 1})
+        ds_id = _first_id(r, "dataSets")
+    if ds_id:
+        ds = c.get_data_set(ds_id, fields="id,displayName,periodType")
+        assert ds.get("id") == ds_id
