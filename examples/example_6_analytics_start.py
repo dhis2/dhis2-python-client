@@ -1,8 +1,5 @@
-# Import the library
-from dhis2_client import DHIS2Client
-
-# Make Auth configuratoin
-client = DHIS2Client(base_url="http://localhost:9090", username="admin", password="district")
+from examples._config import make_client
+client = make_client()
 
 # Get current user
 me = client.get_current_user(fields="id,username,firstName,surname")

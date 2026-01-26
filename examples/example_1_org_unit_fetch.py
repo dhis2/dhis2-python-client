@@ -1,15 +1,7 @@
-from dhis2_client import DHIS2Client
-from dhis2_client.settings import ClientSettings
-
 from itertools import islice
 
-# connection config
-cfg = ClientSettings(
-    base_url="https://play.im.dhis2.org/dev/",
-    username="admin",
-    password="district"
-)
-client = DHIS2Client(settings=cfg)
+from examples._config import make_client
+client = make_client()
 
 ous = list(client.get_organisation_units())
 print("▶ Total number of ous available: ", len(ous))

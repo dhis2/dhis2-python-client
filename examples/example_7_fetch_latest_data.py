@@ -1,7 +1,6 @@
-from dhis2_client import DHIS2Client
+from examples._config import make_client
+client = make_client()
 
-
-client = DHIS2Client(base_url="http://localhost:9090", username="admin", password="district")
 #FTRrcoaog83
 #fbfJHSPpUQD
 #Fyul5papro0

@@ -3,21 +3,9 @@ import geopandas as gpd
 import io
 import json
 
-from dhis2_client import DHIS2Client
-from dhis2_client.settings import ClientSettings
+from examples._config import make_client
+client = make_client()
 
-# centralized config
-cfg = ClientSettings(
-    #base_url="https://play.im.dhis2.org/dev/",
-    base_url="http://localhost:9797/",
-    username="admin",
-    password="district",
-    log_level="INFO",        # default "WARNING"
-    log_format="json",       # default "json"; use "text" for human-readable
-    log_destination="stdout" # default "stderr"; can also be file path
-)
-
-client = DHIS2Client(settings=cfg)
 info = client.get_system_info()
 print('version: ', info["version"])
 
