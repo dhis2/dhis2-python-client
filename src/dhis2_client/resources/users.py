@@ -126,11 +126,17 @@ class Users(Resource):
         )
         paths = self._paths()
 
-        def filtered(items: Optional[Iterable[Dict[str, str]]], remove_ids: Optional[Iterable[str]]):
-            cur_ids = self._to_id_set(items)
+        def filtered(items, remove_ids):
             rem = set(remove_ids or [])
-            keep = [{"id": x} for x in cur_ids - rem]
-            return keep
+            kept = []
+            seen = set()
+            for obj in (items or []):
+                i = obj.get("id")
+                if not i or i in rem or i in seen:
+                    continue
+                kept.append({"id": i})
+                seen.add(i)
+            return kept
 
         ops: List[Dict[str, Any]] = []
 

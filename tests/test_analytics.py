@@ -35,7 +35,7 @@ def _mock_system_calendar(respx_mock, calendar="iso8601"):
 
 
 @pytest.mark.unit
-def test_get_analytics(respx_mock):
+def test_get_analytics_data(respx_mock):
     respx_mock.get(f"{BASE}/api/analytics").mock(
         return_value=httpx.Response(
             200,
@@ -46,8 +46,133 @@ def test_get_analytics(respx_mock):
         )
     )
     c = DHIS2Client(BASE)
-    resp = c.get_analytics(dimension=["dx:de1;de2", "pe:202401"], skipMeta=True)
+    resp = c.get_analytics_data(dimension=["dx:de1;de2", "pe:202401"], skipMeta=True)
     assert "headers" in resp and "rows" in resp
+
+
+@pytest.mark.unit
+def test_get_analytics_data_builds_dimensions_from_lists(respx_mock):
+    captured = {}
+
+    def _cb(request: httpx.Request):
+        # Capture repeated ?dimension=... params
+        dims = [v for k, v in request.url.params.multi_items() if k == "dimension"]
+        captured["dims"] = dims
+        return httpx.Response(
+            200,
+            json={"headers": [{"name": "dx"}, {"name": "pe"}, {"name": "ou"}], "rows": []},
+        )
+
+    respx_mock.get(f"{BASE}/api/analytics").mock(side_effect=_cb)
+    c = DHIS2Client(BASE)
+
+    resp = c.get_analytics_data(
+        dx=["DE_A", "DE_B"],
+        pe=["202501"],
+        ou=["OU_1"],
+        tableLayout=True,
+    )
+
+    assert "headers" in resp and "rows" in resp
+    # Order of repeated params is preserved; assert expected content
+    assert set(captured["dims"]) == {"dx:DE_A;DE_B", "pe:202501", "ou:OU_1"}
+
+
+@pytest.mark.unit
+def test_get_analytics_data_builds_date_range(respx_mock):
+    captured = {}
+
+    def _cb(request: httpx.Request):
+        params = request.url.params
+        dims = [v for k, v in params.multi_items() if k == "dimension"]
+        captured["dims"] = dims
+        captured["startDate"] = params.get("startDate")
+        captured["endDate"] = params.get("endDate")
+        return httpx.Response(200, json={"rows": []})
+
+    respx_mock.get(f"{BASE}/api/analytics").mock(side_effect=_cb)
+    c = DHIS2Client(BASE)
+
+    resp = c.get_analytics_data(
+        dx=["DE_X"],
+        ou=["OU_Z"],
+        startDate="2025-01-01",
+        endDate="2025-01-31",
+        displayProperty="NAME",
+    )
+
+    assert "rows" in resp
+    assert set(captured["dims"]) == {"dx:DE_X", "ou:OU_Z"}
+    assert captured["startDate"] == "2025-01-01"
+    assert captured["endDate"] == "2025-01-31"
+
+
+@pytest.mark.unit
+def test_get_analytics_data_forbids_mixed_pe_and_dates():
+    c = DHIS2Client(BASE)
+    with pytest.raises(ValueError):
+        # pe together with start/end should be rejected before any HTTP call
+        c.get_analytics_data(
+            dx=["DE"],
+            pe=["202501"],
+            ou=["OU"],
+            startDate="2025-01-01",
+            endDate="2025-01-31",
+        )
+
+
+@pytest.mark.unit
+def test_get_analytics_data_forbids_half_date_range():
+    c = DHIS2Client(BASE)
+    with pytest.raises(ValueError):
+        c.get_analytics_data(dx=["DE"], ou=["OU"], startDate="2025-01-01")  # missing endDate
+
+
+@pytest.mark.unit
+def test_get_analytics_data_strips_empty_params(respx_mock):
+    captured = {}
+
+    def _cb(request: httpx.Request):
+        params = request.url.params
+        dims = [v for k, v in params.multi_items() if k == "dimension"]
+        captured["dims"] = dims
+        captured["tableLayout"] = params.get("tableLayout")
+        captured["displayProperty"] = params.get("displayProperty", None)
+        return httpx.Response(200, json={"rows": []})
+
+    respx_mock.get(f"{BASE}/api/analytics").mock(side_effect=_cb)
+    c = DHIS2Client(BASE)
+
+    # displayProperty="" should be dropped; tableLayout=True should be kept
+    c.get_analytics_data(
+        dx=["DE"],
+        pe=["202501"],
+        ou=["OU"],
+        tableLayout=True,
+        displayProperty="",
+    )
+
+    assert set(captured["dims"]) == {"dx:DE", "pe:202501", "ou:OU"}
+    assert captured["tableLayout"] == "true"
+    assert captured["displayProperty"] is None  # stripped
+
+
+@pytest.mark.unit
+def test_get_analytics_data_keeps_direct_dimension_param(respx_mock):
+    """Compatibility: users can still pass `dimension=[...]` directly, and we forward it untouched."""
+    captured = {}
+
+    def _cb(request: httpx.Request):
+        dims = [v for k, v in request.url.params.multi_items() if k == "dimension"]
+        captured["dims"] = dims
+        return httpx.Response(200, json={"rows": []})
+
+    respx_mock.get(f"{BASE}/api/analytics").mock(side_effect=_cb)
+    c = DHIS2Client(BASE)
+
+    c.get_analytics_data(dimension=["dx:DE1;DE2", "pe:202401", "ou:OU1"])
+
+    assert captured["dims"] == ["dx:DE1;DE2", "pe:202401", "ou:OU1"]
 
 
 @pytest.mark.unit

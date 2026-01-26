@@ -382,8 +382,8 @@ class DHIS2Client:
         return self._data_values.post_set(payload)
 
     # Analytics
-    def get_analytics(self, *, table: str = "analytics", **params) -> Dict[str, Any]:
-        return self._analytics.get(table=table, **params)
+    def get_analytics_data(self, **params: Any) -> Dict[str, Any]:
+        return self._analytics.aggregate(**params)
 
     def analytics_latest_period_for_level(self, de_uid: str, level: int) -> Dict[str, Any]:
         return self._analytics.latest_period_for_level(de_uid, level)

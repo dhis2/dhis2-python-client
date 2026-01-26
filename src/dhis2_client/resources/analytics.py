@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any, List, Iterable
+from typing import Dict, Any, List, Iterable, Tuple
 from datetime import date
 from datetime import date
 
@@ -12,11 +12,76 @@ from ..utils.calendar import (
     next_period_id,                # next ISO period id
 )
 
+def _norm(v):
+    if v in (None, "", [], {}):
+        return None
+    if isinstance(v, (list, tuple, set)):
+        return ";".join(map(str, v))
+    return str(v)
 
 class Analytics(Resource):
     """
     Analytics helpers (read-only).
     """
+    def aggregate(self, **params) -> Dict[str, Any]:
+        # Extract & normalize primary dims
+        dx = _norm(params.pop("dx", None))
+        pe = _norm(params.pop("pe", None))
+        ou = _norm(params.pop("ou", None))
+
+        # Dates (kept if both present)
+        startDate = _norm(params.get("startDate"))
+        endDate   = _norm(params.get("endDate"))
+
+        # Guards
+        if (startDate and not endDate) or (endDate and not startDate):
+            raise ValueError("Provide both startDate and endDate, or neither.")
+        if pe and (startDate or endDate):
+            raise ValueError("Use either 'pe' OR 'startDate'+'endDate', not both.")
+
+        # Build dimension=… entries
+        dimension: List[str] = []
+        if dx: dimension.append(f"dx:{dx}")
+        if pe: dimension.append(f"pe:{pe}")
+        if ou: dimension.append(f"ou:{ou}")
+
+        # Build query as list of (key, value) so repeated keys work
+        query: List[Tuple[str, Any]] = []
+        for d in dimension:
+            query.append(("dimension", d))
+
+        # Add date range if used
+        if startDate and endDate:
+            query.append(("startDate", startDate))
+            query.append(("endDate", endDate))
+
+        # Add any non-empty extras (displayProperty, tableLayout, order, columns, rows, etc.)
+        for k, v in list(params.items()):
+            if k in ("dx", "pe", "ou", "startDate", "endDate"):
+                continue
+            if v in (None, "", [], {}):
+                continue
+
+            # Special-case for user-supplied raw dimension param:
+            if k == "dimension":
+                if isinstance(v, (list, tuple, set)):
+                    for item in v:
+                        query.append(("dimension", str(item)))
+                else:
+                    query.append(("dimension", str(v)))
+                continue
+
+            # Normalize booleans to lowercase strings for DHIS2 ('true'/'false')
+            if isinstance(v, bool):
+                query.append((k, "true" if v else "false"))
+                continue
+
+            # Everything else
+            query.append((k, v))
+
+        # GET /api/analytics with canonical query
+        return self._get("/api/analytics", params=query)
+
 
     def get(self, *, table: str = "analytics", **params) -> Dict[str, Any]:
         return self._get(f"/api/{table}", params=params)
