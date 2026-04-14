@@ -4,6 +4,19 @@ from .base import Resource
 
 
 class OrganisationUnits(Resource):
+    @staticmethod
+    def _tree_fields(levels: Optional[int]) -> str:
+        base = "id,displayName,level"
+        if levels is None:
+            return "id,displayName,level,children[id,displayName,level,children]"
+        if levels < 1:
+            raise ValueError("levels must be >= 1")
+
+        nested = base
+        for _ in range(levels - 1):
+            nested = f"{base},children[{nested}]"
+        return nested
+
     def list(self, **params) -> Iterable[Dict[str, Any]]:
         return self._list("/api/organisationUnits", params=params, item_key="organisationUnits")
 
@@ -21,7 +34,7 @@ class OrganisationUnits(Resource):
         return self._delete(f"/api/organisationUnits/{uid}")
 
     def tree(self, root_uid: Optional[str] = None, levels: Optional[int] = None) -> Dict[str, Any]:
-        fields = "id,displayName,level,children[id,displayName,level,children]"
+        fields = self._tree_fields(levels)
         if root_uid:
             return self._get(f"/api/organisationUnits/{root_uid}", params={"fields": fields})
         return {"organisationUnits": list(self.list(level=1, fields=fields))}

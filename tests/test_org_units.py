@@ -84,3 +84,30 @@ def test_org_unit_conflict_raises(respx_mock):
     except DHIS2HTTPError as e:
         assert e.status_code == 409
         assert e.payload["response"]["status"] == "ERROR"
+
+
+@pytest.mark.unit
+def test_get_org_unit_tree_uses_requested_depth(respx_mock):
+    captured = {}
+
+    def _cb(request: httpx.Request):
+        captured["fields"] = request.url.params.get("fields")
+        return httpx.Response(200, json={"id": "ou1", "displayName": "A", "level": 1})
+
+    respx_mock.get(f"{BASE}/api/organisationUnits/ou1").mock(side_effect=_cb)
+    c = DHIS2Client(BASE)
+
+    got = c.get_org_unit_tree(root_uid="ou1", levels=3)
+
+    assert got["id"] == "ou1"
+    assert (
+        captured["fields"]
+        == "id,displayName,level,children[id,displayName,level,children[id,displayName,level]]"
+    )
+
+
+@pytest.mark.unit
+def test_get_org_unit_tree_rejects_invalid_depth():
+    c = DHIS2Client(BASE)
+    with pytest.raises(ValueError):
+        c.get_org_unit_tree(levels=0)

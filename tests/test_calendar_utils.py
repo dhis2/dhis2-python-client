@@ -20,3 +20,22 @@ def test_period_key_and_next_yearly():
     se = period_start_end("2025")
     assert se["startDate"] == "2025-01-01"
     assert se["endDate"] == "2025-12-31"
+
+
+def test_period_key_and_next_daily():
+    assert period_key("20250102") > period_key("20250101")
+    assert next_period_id("20250131") == "20250201"
+
+
+def test_period_key_and_next_weekly():
+    assert period_key("2025W02") > period_key("2025W01")
+    assert next_period_id("2025W52") == "2026W01"
+
+
+def test_period_key_and_next_six_monthly():
+    assert period_key("2025S2") > period_key("2025S1")
+    assert next_period_id("2025S2") == "2026S1"
+
+
+def test_period_key_supports_date_ranges():
+    assert period_key("20250101_20250131") > period_key("20241201_20241231")

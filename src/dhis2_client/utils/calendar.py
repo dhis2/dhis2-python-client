@@ -145,9 +145,10 @@ def next_period_id(period_id: str) -> str:
 
 def period_key(period_id: str) -> Tuple[int, int, int]:
     """Sortable key so max(periods, key=period_key) gives the latest."""
-    if len(period_id) == 4: return (int(period_id), 0, 0)
-    if "Q" in period_id:    return (int(period_id[:4]), int(period_id[-1]), 0)
-    return (int(period_id[:4]), int(period_id[4:6]), 0)
+    bounds = period_start_end(period_id)
+    start = _date.fromisoformat(bounds["startDate"]).toordinal()
+    end = _date.fromisoformat(bounds["endDate"]).toordinal()
+    return (start, end, 0)
 
 # --- Calendar year bounds (system calendar aware) ----------------------------
 

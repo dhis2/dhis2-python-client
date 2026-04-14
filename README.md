@@ -494,7 +494,7 @@ for de in client.list_paged(
 - Run **unit tests** (mocked; no .env needed):
 
 ```bash
-pytest -q
+uv run python -m pytest -q
 ```
 
 - Lint/format:
@@ -524,7 +524,7 @@ Read-only integration tests (if you have credentials):
 export DHIS2_BASE_URL="http://localhost:8080"
 export DHIS2_USERNAME="admin"
 export DHIS2_PASSWORD="district"
-pytest -m integration -q
+uv run python -m pytest -m integration -q
 ```
 
 Destructive tests (opt-in; **be careful**):
