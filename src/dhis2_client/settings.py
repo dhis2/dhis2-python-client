@@ -27,6 +27,7 @@ class ClientSettings:
     # --- HTTP behavior ---
     default_page_size: int = 50
     timeout: float = 30.0
+    connect_timeout: float = 60.0
     retries: int = 3
     verify_ssl: bool = True
 

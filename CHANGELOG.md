@@ -15,5 +15,6 @@
 - Utils: calendar_year_bounds, calendar_year_bounds_for, period_key, period_start_end, next_period_id.
 ### Changed
 - Default dependency: convertdate>=2.4 for multi-calendar support.
+- HTTP timeout controls: added `connect_timeout` (default 60s) while keeping `timeout` for read/write/pool (default 30s).
 ### Validation
 - Error if data element is linked to datasets with mixed periodType.
