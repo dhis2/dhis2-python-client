@@ -40,6 +40,7 @@ class DHIS2Client:
         token: str | None = None,
         default_page_size: int = 50,
         timeout: float = 30.0,
+        connect_timeout: float = 60.0,
         retries: int = 3,
         verify_ssl: bool = True,
         settings: ClientSettings | None = None,
@@ -62,6 +63,9 @@ class DHIS2Client:
                 default_page_size if default_page_size != 50 else settings.default_page_size
             )
             timeout = timeout if timeout != 30.0 else settings.timeout
+            connect_timeout = (
+                connect_timeout if connect_timeout != 60.0 else settings.connect_timeout
+            )
             retries = retries if retries != 3 else settings.retries
             verify_ssl = verify_ssl if verify_ssl is not True else settings.verify_ssl
             self.model_mode = settings.model_mode
@@ -80,6 +84,7 @@ class DHIS2Client:
         self.base_url = base_url.rstrip("/")
         self.default_page_size = int(default_page_size)
         self.timeout = float(timeout)
+        self.connect_timeout = float(connect_timeout)
         self.retries = int(retries)
         self.verify_ssl = bool(verify_ssl)
 
@@ -117,9 +122,10 @@ class DHIS2Client:
         }
         if self._token_header:
             headers["Authorization"] = self._token_header
+        timeout = httpx.Timeout(timeout=self.timeout, connect=self.connect_timeout)
         return httpx.Client(
             headers=headers,
-            timeout=self.timeout,
+            timeout=timeout,
             verify=self.verify_ssl,
         )
 

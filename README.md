@@ -120,6 +120,8 @@ cfg = ClientSettings(
     base_url="http://localhost:8080",
     username="admin",
     password="district",
+    connect_timeout=60.0,   # default connect timeout (cold-start friendly)
+    timeout=30.0,           # default read/write/pool timeout
     log_level="INFO",        # default "WARNING"
     log_format="json",       # default "json"; use "text" for human-readable
     log_destination="stdout" # default "stderr"; can also be file path
@@ -140,6 +142,7 @@ client = DHIS2Client(settings=cfg, log_level="DEBUG")  # DEBUG takes precedence
 
 - **Default**: JSON logs at WARNING level to stderr.
 - **Configurable**: via ClientSettings or constructor kwargs.
+- **Timeouts**: `connect_timeout=60s` by default, `timeout=30s` for request read/write/pool.
 
 ```python
 # JSON (default) logs at INFO to stdout
