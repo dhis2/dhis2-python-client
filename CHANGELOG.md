@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] - 2026-04-14
+### Changed
+- Corrected release wording from "Centrlized" to "Centralized".
+- Added separate `connect_timeout` control (default `60s`) while keeping `timeout` for read/write/pool (default `30s`).
+
 ## [0.1.0] - 2025-09-21
 ### Added
 - Sync `DHIS2Client` using httpx (dict/JSON only).
