@@ -1,4 +1,5 @@
-from dhis2_client.utils.calendar import period_key, next_period_id, period_start_end
+from dhis2_client.utils.calendar import next_period_id, period_key, period_start_end
+
 
 def test_period_key_and_next_monthly():
     assert period_key("202512") > period_key("202511")

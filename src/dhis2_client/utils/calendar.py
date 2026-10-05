@@ -1,12 +1,16 @@
 # dhis2_client/utils/calendar.py
 from __future__ import annotations
-from datetime import date, timedelta, datetime
-from dataclasses import dataclass
-from typing import Dict, Tuple, Optional, List
+
 import calendar as _calendar
-import re as _re
-from datetime import date as _date, timedelta as _td, datetime as _dt
 import importlib
+import re as _re
+from dataclasses import dataclass
+from datetime import date, timedelta
+from datetime import date as _date
+from datetime import datetime as _dt
+from datetime import timedelta as _td
+from typing import Dict, List, Optional, Tuple
+
 
 def _opt_import(name: str):
     try:
@@ -267,13 +271,17 @@ def _to_greg(cal: str, y: int, m: int, d: int) -> date:
     if cal in ("iso8601","gregorian","buddhist"):
         return date(y, m, d)
     if cal == "ethiopian" and ethiopian:
-        gy, gm, gd = ethiopian.to_gregorian(y, m, d); return date(gy, gm, gd)
+        gy, gm, gd = ethiopian.to_gregorian(y, m, d)
+        return date(gy, gm, gd)
     if cal == "coptic" and coptic:
-        gy, gm, gd = coptic.to_gregorian(y, m, d); return date(gy, gm, gd)
+        gy, gm, gd = coptic.to_gregorian(y, m, d)
+        return date(gy, gm, gd)
     if cal == "islamic" and islamic:
-        gy, gm, gd = islamic.to_gregorian(y, m, d); return date(gy, gm, gd)
+        gy, gm, gd = islamic.to_gregorian(y, m, d)
+        return date(gy, gm, gd)
     if cal in ("persian","jalali") and jalali:
-        gy, gm, gd = jalali.to_gregorian(y, m, d); return date(gy, gm, gd)
+        gy, gm, gd = jalali.to_gregorian(y, m, d)
+        return date(gy, gm, gd)
     return date(y, m, d)
 
 def _from_greg(cal: str, g: date) -> Tuple[int,int,int]:
@@ -338,7 +346,8 @@ def sixmonthly_bounds(calendar_id: str, year_label: int, variant: str, half: int
     if variant == "SixMonthlyApril":
         if half == 1:
             y = year_label
-            s,_ = month_bounds(cal, y, 4);  _,e = month_bounds(cal, y, 9)
+            s, _ = month_bounds(cal, y, 4)
+            _, e = month_bounds(cal, y, 9)
         else:
             y = year_label
             s,_ = month_bounds(cal, y, 10)
@@ -428,7 +437,8 @@ def latest_closed_period(
     if pt == "Monthly":
         y, m, _ = _from_greg(cal, today)
         if m == 1:
-            y -= 1; m = 12
+            y -= 1
+            m = 12
         else:
             m -= 1
         s, e = month_bounds(cal, y, m)
@@ -440,7 +450,8 @@ def latest_closed_period(
         y, m, _ = _from_greg(cal, today)
         # move to previously closed calendar month
         if m == 1:
-            y -= 1; m_prev = 12
+            y -= 1
+            m_prev = 12
         else:
             m_prev = m - 1
         # pair start is odd month of the pair
@@ -480,11 +491,14 @@ def latest_closed_period(
         _, yl_sel, h_sel = candidates[-1]
         s, e = sixmonthly_bounds(cal, yl_sel, pt, h_sel)
         if pt == "SixMonthly":
-            pid = f"{s.year}S{1 if _from_greg(cal, s)[1] == 1 else 2}" if cal in ("iso8601","gregorian","buddhist") else None
+            half = 1 if _from_greg(cal, s)[1] == 1 else 2
+            pid = f"{s.year}S{half}" if cal in ("iso8601", "gregorian", "buddhist") else None
         elif pt == "SixMonthlyApril":
-            pid = f"{s.year}AprilS{1 if _from_greg(cal, s)[1] == 4 else 2}" if cal in ("iso8601","gregorian","buddhist") else None
+            half = 1 if _from_greg(cal, s)[1] == 4 else 2
+            pid = f"{s.year}AprilS{half}" if cal in ("iso8601", "gregorian", "buddhist") else None
         else:
-            pid = f"{s.year}NovS{1 if _from_greg(cal, s)[1] == 11 else 2}" if cal in ("iso8601","gregorian","buddhist") else None
+            half = 1 if _from_greg(cal, s)[1] == 11 else 2
+            pid = f"{s.year}NovS{half}" if cal in ("iso8601", "gregorian", "buddhist") else None
         return PeriodResult(pid, f"{_yyyymmdd(s)}_{_yyyymmdd(e)}", _iso(s), _iso(e))
 
     # ---- Yearly

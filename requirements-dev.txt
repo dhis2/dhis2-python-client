@@ -1,6 +1,2 @@
--r requirements.txt
-pytest>=7
-ruff>=0.6.0
-respx>=0.20.2
-python-dotenv>=1.0.1
-matplotlib
+# Development environment: the package with its dev and examples extras.
+-e .[dev,examples]

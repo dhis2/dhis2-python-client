@@ -13,3 +13,6 @@ build/
 .coverage
 htmlcov/
 .codex
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

@@ -1,4 +1,5 @@
 from examples._config import make_client
+
 client = make_client()
 
 # Metadata creation - create data elements
@@ -8,7 +9,10 @@ data_elements = [
         "name": "Air temperature (ERA5-Land)_1",
         "shortName": "Air temperature 1",
         "code": "ERA5_LAND_TEMPERATURE_1",
-        "description": "Average air temperature in °C at 2 m above the surface. Data source: ERA5-Land / Copernicus Climate Change Service",
+        "description": (
+            "Average air temperature in °C at 2 m above the surface. "
+            "Data source: ERA5-Land / Copernicus Climate Change Service"
+        ),
         "valueType": "NUMBER",
         "aggregationType": "SUM",
         "domainType": "AGGREGATE",
@@ -19,7 +23,10 @@ data_elements = [
         "name": "Max air temperature (ERA5-Land)_1",
         "shortName": "Max air temperature_1",
         "code": "ERA5_LAND_TEMPERATURE_MAX_1",
-        "description": "Maximum air temperature in °C at 2 m above the surface. Data source: ERA5-Land / Copernicus Climate Change Service",
+        "description": (
+            "Maximum air temperature in °C at 2 m above the surface. "
+            "Data source: ERA5-Land / Copernicus Climate Change Service"
+        ),
         "valueType": "NUMBER",
         "aggregationType": "MAX",
         "domainType": "AGGREGATE",

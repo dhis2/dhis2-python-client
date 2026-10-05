@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, Optional, List
+from typing import Any, Dict, Iterable, Optional
 
 from .base import Resource
 
@@ -88,7 +88,9 @@ class OrganisationUnits(Resource):
 
         # 2) all levels
         levels_resp = self._get("/api/organisationUnitLevels", params={"paging": "false", "fields": "level,name"})
-        all_levels = sorted({item["level"] for item in levels_resp.get("organisationUnitLevels", []) if "level" in item})
+        all_levels = sorted(
+            {item["level"] for item in levels_resp.get("organisationUnitLevels", []) if "level" in item}
+        )
         if not all_levels:
             # Fallback: just request with parent (will return direct children at all levels that have geometry)
             return self.geojson(parent=root_uid, **params)

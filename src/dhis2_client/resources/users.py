@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Optional, List
+from typing import Any, Dict, Iterable, List, Optional
 
 from .base import Resource
 
@@ -141,11 +141,17 @@ class Users(Resource):
         ops: List[Dict[str, Any]] = []
 
         if capture:
-            ops.append({"op": "replace", "path": paths["capture"], "value": filtered(cur.get("organisationUnits"), capture)})
+            ops.append(
+                {"op": "replace", "path": paths["capture"], "value": filtered(cur.get("organisationUnits"), capture)}
+            )
         if view:
-            ops.append({"op": "replace", "path": paths["view"], "value": filtered(cur.get("dataViewOrganisationUnits"), view)})
+            ops.append(
+                {"op": "replace", "path": paths["view"], "value": filtered(cur.get("dataViewOrganisationUnits"), view)}
+            )
         if tei:
-            ops.append({"op": "replace", "path": paths["tei"], "value": filtered(cur.get("teiSearchOrganisationUnits"), tei)})
+            ops.append(
+                {"op": "replace", "path": paths["tei"], "value": filtered(cur.get("teiSearchOrganisationUnits"), tei)}
+            )
 
         return {"status": "NOOP"} if not ops else self._patch(f"/api/users/{uid}", json=ops)
 
