@@ -66,16 +66,16 @@ This client provides a **lightweight and simple** way to work with the DHIS2 Web
 
 > Requires **Python 3.10+**
 
-At this stage the package is not yet published on PyPI.  
-You can install it from source:
+```bash
+pip install dhis2-client
+```
+
+To work on the client itself, install it from a checkout with the development extras:
 
 ```bash
-# Clone the repo
 git clone https://github.com/dhis2/dhis2-python-client.git
 cd dhis2-python-client
-
-# Install in editable/development mode
-pip install -e .
+pip install -e .[dev]
 ```
 
 ---
