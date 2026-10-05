@@ -1,4 +1,5 @@
 from examples._config import make_client
+
 client = make_client()
 
 # Get current user

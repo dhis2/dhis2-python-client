@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Dict, Any, Optional, List, Iterable
 from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Optional
 
 from .base import Resource
 
@@ -219,8 +219,12 @@ class Sharing(Resource):
         desired_groups = _acc_list(user_group_ids)
 
         obj = self._current(object_type="dataSet", object_id=dataset_id)
-        merged_users  = self._merge_accesses(obj.get("userAccesses") or [], {ua["id"]: ua["access"] for ua in desired_users})
-        merged_groups = self._merge_accesses(obj.get("userGroupAccesses") or [], {ga["id"]: ga["access"] for ga in desired_groups})
+        merged_users = self._merge_accesses(
+            obj.get("userAccesses") or [], {ua["id"]: ua["access"] for ua in desired_users}
+        )
+        merged_groups = self._merge_accesses(
+            obj.get("userGroupAccesses") or [], {ga["id"]: ga["access"] for ga in desired_groups}
+        )
 
         body = self._build_body(
             public_access=public_access,

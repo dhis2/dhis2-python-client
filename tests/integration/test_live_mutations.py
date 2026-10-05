@@ -1,5 +1,6 @@
 import os
 from datetime import date
+
 import pytest
 
 from dhis2_client.errors import DHIS2HTTPError

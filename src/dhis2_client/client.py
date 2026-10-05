@@ -1,6 +1,6 @@
+import atexit
 from typing import Any, Dict, Iterable, Optional
 
-import atexit
 import httpx
 
 from .errors import DHIS2HTTPError
@@ -12,8 +12,8 @@ from .resources import (
     DataSets,
     DataValues,
     OrganisationUnits,
-    Users,
     Sharing,
+    Users,
 )
 from .resources.system import System
 from .settings import ClientSettings
@@ -405,7 +405,9 @@ class DHIS2Client:
         return self._sharing.grant_self_access(object_type=object_type, object_id=object_id, access=access)
 
     def set_public_access(self, *, object_type: str, object_id: str, public_access: str) -> dict:
-        return self._sharing.set_public_access(object_type=object_type, object_id=object_id, public_access=public_access)
+        return self._sharing.set_public_access(
+            object_type=object_type, object_id=object_id, public_access=public_access
+        )
 
     def grant_access(
         self,

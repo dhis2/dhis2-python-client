@@ -1,9 +1,11 @@
-import matplotlib.pyplot as plt
-import geopandas as gpd
 import io
 import json
 
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
 from examples._config import make_client
+
 client = make_client()
 
 info = client.get_system_info()

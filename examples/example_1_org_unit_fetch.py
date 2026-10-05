@@ -1,6 +1,7 @@
 from itertools import islice
 
 from examples._config import make_client
+
 client = make_client()
 
 ous = list(client.get_organisation_units())

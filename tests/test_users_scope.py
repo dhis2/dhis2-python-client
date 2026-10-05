@@ -1,6 +1,7 @@
+import json
+
 import httpx
 import pytest
-import json
 
 from dhis2_client import DHIS2Client
 

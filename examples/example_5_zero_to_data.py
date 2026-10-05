@@ -1,4 +1,5 @@
 from examples._config import make_client
+
 client = make_client()
 
 # Get current user
@@ -38,21 +39,24 @@ data_element = {
     "domainType": "AGGREGATE"
 }
 data_element_response = client.create_data_element(data_element)
-print(f"✔ Data element create status: {data_element_response['status']} and UID: {data_element_response['response']['uid']}")
+print(
+    f"✔ Data element create status: {data_element_response['status']} "
+    f"and UID: {data_element_response['response']['uid']}"
+)
 
 # Metadata creation #3 - create data set
 data_set = {
-    "name": "My sample data set", 
+    "name": "My sample data set",
     "shortName": "Sample data set",
     "periodType": "Monthly",
     "dataSetElements": [
         {
-            "dataElement": {"id": data_element_response['response']['uid']} 
+            "dataElement": {"id": data_element_response['response']['uid']}
         }
     ],
     "organisationUnits": [
         {
-            "id": org_unit_uid 
+            "id": org_unit_uid
         }
     ]
 }
@@ -69,25 +73,25 @@ payload = {
     "dataValues": [
         {
             "dataElement": data_element_response['response']['uid'],
-            "orgUnit": org_unit_uid,    
+            "orgUnit": org_unit_uid,
             "period": "202501",
             "value": '100'
         },
         {
             "dataElement": data_element_response['response']['uid'],
-            "orgUnit": org_unit_uid,    
+            "orgUnit": org_unit_uid,
             "period": "202502",
             "value": '200'
         },
         {
             "dataElement": data_element_response['response']['uid'],
-            "orgUnit": org_unit_uid,    
+            "orgUnit": org_unit_uid,
             "period": "202503",
             "value": '300'
         },
         {
             "dataElement": data_element_response['response']['uid'],
-            "orgUnit": org_unit_uid,    
+            "orgUnit": org_unit_uid,
             "period": "202504",
             "value": '400'
         }

@@ -1,16 +1,17 @@
 from __future__ import annotations
-from typing import Dict, Any, List, Iterable, Tuple
-from datetime import date
-from datetime import date
 
-from .base import Resource
+from datetime import date
+from typing import Any, Dict, Iterable, List, Tuple
+
 from ..utils.calendar import (
-    calendar_year_bounds,          # (label, {'startDate','endDate'}) for *current* year in DHIS2 calendar
-    calendar_year_bounds_for,      # {'startDate','endDate'} for a specific calendar year label
-    period_key,                    # sortable key for ISO period ids (YYYY / YYYYQn / YYYYMM)
-    period_start_end,              # {'startDate','endDate'} for a given ISO period id
-    next_period_id,                # next ISO period id
+    calendar_year_bounds,  # (label, {'startDate','endDate'}) for *current* year in DHIS2 calendar
+    calendar_year_bounds_for,  # {'startDate','endDate'} for a specific calendar year label
+    next_period_id,  # next ISO period id
+    period_key,  # sortable key for ISO period ids (YYYY / YYYYQn / YYYYMM)
+    period_start_end,  # {'startDate','endDate'} for a given ISO period id
 )
+from .base import Resource
+
 
 def _norm(v):
     if v in (None, "", [], {}):
@@ -41,9 +42,12 @@ class Analytics(Resource):
 
         # Build dimension=… entries
         dimension: List[str] = []
-        if dx: dimension.append(f"dx:{dx}")
-        if pe: dimension.append(f"pe:{pe}")
-        if ou: dimension.append(f"ou:{ou}")
+        if dx:
+            dimension.append(f"dx:{dx}")
+        if pe:
+            dimension.append(f"pe:{pe}")
+        if ou:
+            dimension.append(f"ou:{ou}")
 
         # Build query as list of (key, value) so repeated keys work
         query: List[Tuple[str, Any]] = []
